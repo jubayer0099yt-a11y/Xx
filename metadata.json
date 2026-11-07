@@ -1,0 +1,6 @@
+{
+  "name": "JUBAYER | Bio Links",
+  "description": "Official bio link tree and verified social profiles for JUBAYER (@JUBAYER).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
