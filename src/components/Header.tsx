@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Share2, Volume2, VolumeX, Copy, Check, QrCode, Palette } from 'lucide-react';
+import { Share2, Volume2, VolumeX, Copy, Check, Palette } from 'lucide-react';
 import { ProfileData, ThemePreset } from '../types';
 import { ThemeConfig, THEME_CONFIGS } from '../data/themes';
 import { VerifiedBadgeIcon } from './Icons';
@@ -172,7 +172,7 @@ export function Header({
               onOpenShareModal();
             }}
             aria-label="Share profile"
-            title="Share Profile & QR Code"
+            title="Share Profile"
             className={`h-8 sm:h-9 px-2.5 sm:px-3 rounded-xl border flex items-center gap-1.5 text-xs font-medium transition-colors ${
               isLight
                 ? 'bg-white hover:bg-slate-100 text-slate-800 border-slate-200'
@@ -214,19 +214,6 @@ export function Header({
 
           {/* Vignette Scrim overlay for depth */}
           <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/40 to-black/20 pointer-events-none" />
-
-          {/* QR badge trigger on cover top right */}
-          <button
-            onClick={() => {
-              playTapSound(soundEnabled);
-              onOpenShareModal();
-            }}
-            className="absolute top-3 right-3 px-2.5 py-1.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white/90 hover:text-white text-xs flex items-center gap-1.5 transition-colors z-20"
-            title="View QR Code"
-          >
-            <QrCode className="w-3.5 h-3.5 text-indigo-300" />
-            <span>QR Code</span>
-          </button>
         </div>
       </div>
 
