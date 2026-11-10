@@ -10,7 +10,7 @@ export interface BioLink {
   defaultClicks: number;
 }
 
-export type ThemePreset = 'obsidian' | 'midnight' | 'emerald' | 'light';
+export type ThemePreset = 'signature' | 'cyan' | 'emerald' | 'purple' | 'amber' | 'light';
 
 export interface ProfileData {
   name: string;

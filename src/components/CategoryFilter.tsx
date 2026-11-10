@@ -1,5 +1,6 @@
 import React from 'react';
 import { Search } from 'lucide-react';
+import { ThemeConfig } from '../data/themes';
 import { playTapSound } from '../utils/sound';
 
 interface CategoryFilterProps {
@@ -8,6 +9,7 @@ interface CategoryFilterProps {
   searchQuery: string;
   onSearchChange: (query: string) => void;
   soundEnabled: boolean;
+  themeConfig: ThemeConfig;
 }
 
 export function CategoryFilter({
@@ -16,6 +18,7 @@ export function CategoryFilter({
   searchQuery,
   onSearchChange,
   soundEnabled,
+  themeConfig,
 }: CategoryFilterProps) {
   const categories = [
     { id: 'all', label: 'All Links' },
@@ -24,11 +27,15 @@ export function CategoryFilter({
     { id: 'chat', label: 'Direct Chat' },
   ];
 
+  const isLight = themeConfig.isLight;
+
   return (
     <div className="w-full space-y-3 mb-4">
       {/* Search Input */}
       <div className="relative">
-        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-neutral-500">
+        <div className={`absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none ${
+          isLight ? 'text-slate-400' : 'text-neutral-500'
+        }`}>
           <Search className="w-4 h-4" />
         </div>
         <input
@@ -36,20 +43,30 @@ export function CategoryFilter({
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Filter channels or search links..."
-          className="w-full h-11 pl-10 pr-4 rounded-xl bg-neutral-900/60 border border-neutral-800/80 text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-indigo-500/60 focus:bg-neutral-900/90 transition-all"
+          className={`w-full h-11 pl-10 pr-4 rounded-xl border text-sm transition-all outline-none ${
+            isLight
+              ? 'bg-white/90 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shadow-sm'
+              : `bg-neutral-900/70 ${themeConfig.cardBorder} ${themeConfig.textColor} placeholder-neutral-500 focus:outline-none focus:${themeConfig.accentBorder} focus:ring-1 focus:${themeConfig.accentBorder}`
+          }`}
         />
         {searchQuery && (
           <button
             onClick={() => onSearchChange('')}
-            className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-xs text-neutral-400 hover:text-white"
+            className={`absolute inset-y-0 right-0 pr-3.5 flex items-center text-xs ${
+              isLight ? 'text-slate-400 hover:text-slate-700' : 'text-neutral-400 hover:text-white'
+            }`}
           >
             Clear
           </button>
         )}
       </div>
 
-      {/* Segmented Filter Buttons (interactive controls permitted per §1.A) */}
-      <div className="flex items-center gap-1.5 p-1 bg-neutral-900/70 border border-neutral-800/80 rounded-xl overflow-x-auto no-scrollbar">
+      {/* Segmented Filter Buttons */}
+      <div className={`flex items-center gap-1.5 p-1 rounded-xl border overflow-x-auto no-scrollbar ${
+        isLight
+          ? 'bg-slate-100/90 border-slate-200'
+          : `bg-neutral-900/80 ${themeConfig.cardBorder}`
+      }`}>
         {categories.map((cat) => {
           const isActive = activeCategory === cat.id;
           return (
@@ -61,8 +78,12 @@ export function CategoryFilter({
               }}
               className={`flex-1 min-w-[76px] py-1.5 px-2.5 text-xs font-medium rounded-lg transition-all text-center whitespace-nowrap shrink-0 ${
                 isActive
-                  ? 'bg-neutral-800 text-white shadow-sm border border-neutral-700/60'
-                  : 'text-neutral-400 hover:text-neutral-200'
+                  ? isLight
+                    ? 'bg-white text-slate-900 shadow-sm border border-slate-200 font-semibold'
+                    : `${themeConfig.accentBg} shadow-md border ${themeConfig.accentBorder}`
+                  : isLight
+                    ? 'text-slate-500 hover:text-slate-800'
+                    : 'text-neutral-400 hover:text-neutral-200'
               }`}
             >
               {cat.label}

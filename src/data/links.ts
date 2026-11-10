@@ -5,8 +5,8 @@ export const PROFILE_DATA: ProfileData = {
   handle: '@JUBAYER',
   bio: 'Welcome to my official links',
   verified: true,
-  avatarUrl: '/src/assets/images/jubayer_avatar_1794034998214.jpg',
-  coverUrl: '/src/assets/images/jubayer_cover_1794034998016.jpg',
+  avatarUrl: '/assets/aistudio/39727-removebg-preview_bf8db067.png',
+  coverUrl: '/assets/aistudio/39727-removebg-preview_bf8db067.png',
   email: 'jubayer0099yt@gmail.com',
   copyright: '© 2026 JUBAYER · ALL RIGHTS RESERVED',
 };

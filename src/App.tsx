@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { BIO_LINKS, PROFILE_DATA } from './data/links';
 import { ThemePreset } from './types';
+import { THEME_CONFIGS } from './data/themes';
 import { Header } from './components/Header';
 import { QuickSocialStrip } from './components/QuickSocialStrip';
 import { CategoryFilter } from './components/CategoryFilter';
@@ -16,15 +17,15 @@ import { ShareModal } from './components/ShareModal';
 import { Toast } from './components/Toast';
 
 export default function App() {
-  // Theme state
+  // Theme state with fallback to 'signature'
   const [theme, setTheme] = useState<ThemePreset>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('jubayer_theme') as ThemePreset | null;
-      if (saved && ['obsidian', 'midnight', 'emerald', 'light'].includes(saved)) {
+      if (saved && Object.keys(THEME_CONFIGS).includes(saved)) {
         return saved;
       }
     }
-    return 'obsidian';
+    return 'signature';
   });
 
   // Sound preference state
@@ -46,7 +47,6 @@ export default function App() {
         // Fallback
       }
     }
-    // Default initial clicks
     const initial: Record<string, number> = {};
     BIO_LINKS.forEach((l) => {
       initial[l.id] = l.defaultClicks;
@@ -62,18 +62,23 @@ export default function App() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Active theme configuration
+  const themeConfig = useMemo(() => {
+    return THEME_CONFIGS[theme] || THEME_CONFIGS.signature;
+  }, [theme]);
+
   // Sync theme to localStorage and html tag
   useEffect(() => {
     localStorage.setItem('jubayer_theme', theme);
     const root = document.documentElement;
-    if (theme === 'light') {
+    if (themeConfig.isLight) {
       root.classList.remove('dark');
     } else {
       root.classList.add('dark');
     }
-  }, [theme]);
+  }, [theme, themeConfig]);
 
-  // Sync sound preference
+  // Sound preference toggle
   const toggleSound = () => {
     setSoundEnabled((prev) => {
       const next = !prev;
@@ -127,50 +132,46 @@ export default function App() {
     });
   }, [activeCategory, searchQuery]);
 
-  // Theme-specific background and accent styles
-  const themeClasses = useMemo(() => {
-    switch (theme) {
-      case 'midnight':
-        return {
-          wrapper: 'bg-slate-950 text-slate-100',
-          radialGlow1: 'from-cyan-500/10 via-sky-600/5 to-transparent',
-          radialGlow2: 'from-blue-600/10 via-indigo-600/5 to-transparent',
-        };
-      case 'emerald':
-        return {
-          wrapper: 'bg-zinc-950 text-zinc-100',
-          radialGlow1: 'from-emerald-500/10 via-teal-600/5 to-transparent',
-          radialGlow2: 'from-green-600/10 via-emerald-800/5 to-transparent',
-        };
-      case 'light':
-        return {
-          wrapper: 'bg-neutral-100 text-neutral-900',
-          radialGlow1: 'from-indigo-200/40 via-purple-100/30 to-transparent',
-          radialGlow2: 'from-sky-200/40 via-neutral-100 to-transparent',
-        };
-      case 'obsidian':
-      default:
-        return {
-          wrapper: 'bg-neutral-950 text-neutral-100',
-          radialGlow1: 'from-indigo-600/15 via-purple-600/5 to-transparent',
-          radialGlow2: 'from-blue-600/10 via-indigo-900/5 to-transparent',
-        };
-    }
-  }, [theme]);
-
   return (
-    <div className={`min-h-screen relative overflow-x-hidden transition-colors duration-300 ${themeClasses.wrapper}`}>
-      {/* Ambient background glow layers */}
+    <div
+      style={themeConfig.bgStyle}
+      className={`min-h-screen relative overflow-x-hidden transition-all duration-500 ${
+        themeConfig.textColor
+      }`}
+    >
+      {/* Ambient background using the user's artwork with theme-reactive glow */}
+      <div className="fixed inset-0 pointer-events-none -z-20 overflow-hidden">
+        <img
+          src={PROFILE_DATA.avatarUrl}
+          alt=""
+          aria-hidden="true"
+          className="w-full h-full object-cover object-top scale-125 filter blur-3xl opacity-15 dark:opacity-15"
+        />
+        <div
+          className="absolute inset-0 transition-colors duration-500"
+          style={{
+            backgroundColor: themeConfig.isLight ? 'rgba(255, 255, 255, 0.75)' : 'rgba(10, 10, 15, 0.75)',
+          }}
+        />
+      </div>
+
+      {/* Dynamic Ambient Gradient Spheres */}
       <div
-        className={`fixed top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-gradient-radial ${themeClasses.radialGlow1} blur-3xl pointer-events-none -z-10`}
+        style={{
+          background: `radial-gradient(circle, ${themeConfig.glowColor1} 0%, transparent 70%)`,
+        }}
+        className="fixed top-0 left-1/2 -translate-x-1/2 w-[900px] h-[550px] blur-3xl pointer-events-none -z-10 transition-all duration-500"
       />
       <div
-        className={`fixed bottom-0 right-0 w-[600px] h-[500px] bg-gradient-radial ${themeClasses.radialGlow2} blur-3xl pointer-events-none -z-10`}
+        style={{
+          background: `radial-gradient(circle, ${themeConfig.glowColor2} 0%, transparent 70%)`,
+        }}
+        className="fixed bottom-0 right-0 w-[650px] h-[550px] blur-3xl pointer-events-none -z-10 transition-all duration-500"
       />
 
       {/* Main Content Container */}
       <main className="w-full max-w-2xl mx-auto px-4 pb-16 flex flex-col items-center">
-        {/* Profile Header */}
+        {/* Profile Header with Interactive Color Switcher */}
         <Header
           profile={PROFILE_DATA}
           soundEnabled={soundEnabled}
@@ -179,10 +180,11 @@ export default function App() {
           onShowToast={showToast}
           currentTheme={theme}
           onSelectTheme={setTheme}
+          themeConfig={themeConfig}
         />
 
         {/* Quick Circular Social Icons Strip */}
-        <div className="w-full mt-4">
+        <div className="w-full mt-3">
           <QuickSocialStrip
             links={BIO_LINKS}
             onLinkClick={handleLinkClick}
@@ -191,13 +193,14 @@ export default function App() {
         </div>
 
         {/* Search & Category Filter */}
-        <div className="w-full mt-4">
+        <div className="w-full mt-3">
           <CategoryFilter
             activeCategory={activeCategory}
             onSelectCategory={setActiveCategory}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             soundEnabled={soundEnabled}
+            themeConfig={themeConfig}
           />
         </div>
 
@@ -212,17 +215,22 @@ export default function App() {
                 onLinkClick={handleLinkClick}
                 onShowToast={showToast}
                 soundEnabled={soundEnabled}
+                themeConfig={themeConfig}
               />
             ))
           ) : (
-            <div className="w-full py-12 text-center text-neutral-400 bg-neutral-900/30 rounded-2xl border border-neutral-800">
+            <div className={`w-full py-12 text-center rounded-2xl border ${
+              themeConfig.isLight
+                ? 'bg-white/80 border-slate-200 text-slate-600'
+                : 'bg-neutral-900/40 border-neutral-800 text-neutral-400'
+            }`}>
               <p className="text-sm font-medium">No links matching "{searchQuery}"</p>
               <button
                 onClick={() => {
                   setSearchQuery('');
                   setActiveCategory('all');
                 }}
-                className="mt-2 text-xs text-indigo-400 hover:text-indigo-300 font-medium"
+                className={`mt-2 text-xs font-semibold ${themeConfig.accentText}`}
               >
                 Reset filters
               </button>
@@ -235,6 +243,7 @@ export default function App() {
           email={PROFILE_DATA.email}
           onShowToast={showToast}
           soundEnabled={soundEnabled}
+          themeConfig={themeConfig}
         />
 
         {/* Footer */}
@@ -242,6 +251,7 @@ export default function App() {
           copyright={PROFILE_DATA.copyright}
           onOpenShareModal={() => setIsShareModalOpen(true)}
           soundEnabled={soundEnabled}
+          themeConfig={themeConfig}
         />
       </main>
 

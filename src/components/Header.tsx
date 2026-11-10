@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { Share2, Volume2, VolumeX, Copy, Check, Mail, Sparkles, QrCode } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Share2, Volume2, VolumeX, Copy, Check, QrCode, Palette } from 'lucide-react';
 import { ProfileData, ThemePreset } from '../types';
+import { ThemeConfig, THEME_CONFIGS } from '../data/themes';
 import { VerifiedBadgeIcon } from './Icons';
 import { playCopySound, playTapSound } from '../utils/sound';
 
@@ -12,6 +13,7 @@ interface HeaderProps {
   onShowToast: (msg: string) => void;
   currentTheme: ThemePreset;
   onSelectTheme: (theme: ThemePreset) => void;
+  themeConfig: ThemeConfig;
 }
 
 export function Header({
@@ -22,10 +24,28 @@ export function Header({
   onShowToast,
   currentTheme,
   onSelectTheme,
+  themeConfig,
 }: HeaderProps) {
   const [copiedHandle, setCopiedHandle] = useState(false);
-  const [imageError, setImageError] = useState(false);
   const [coverError, setCoverError] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const [isColorMenuOpen, setIsColorMenuOpen] = useState(false);
+  const colorMenuRef = useRef<HTMLDivElement | null>(null);
+
+  // Close color popover on click outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (colorMenuRef.current && !colorMenuRef.current.contains(event.target as Node)) {
+        setIsColorMenuOpen(false);
+      }
+    }
+    if (isColorMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isColorMenuOpen]);
 
   const handleCopyHandle = async () => {
     try {
@@ -39,68 +59,111 @@ export function Header({
     }
   };
 
+  const handleThemeChange = (newTheme: ThemePreset) => {
+    playTapSound(soundEnabled);
+    onSelectTheme(newTheme);
+    const targetConfig = THEME_CONFIGS[newTheme];
+    onShowToast(`Theme changed to: ${targetConfig ? targetConfig.name : newTheme}`);
+  };
+
+  const isLight = themeConfig.isLight;
+
   return (
-    <header className="relative w-full overflow-hidden">
+    <header className="relative w-full">
       {/* Top utility row */}
-      <div className="w-full max-w-2xl mx-auto px-4 pt-4 pb-2 flex items-center justify-between gap-4 z-20 relative">
+      <div className="w-full max-w-2xl mx-auto px-4 pt-4 pb-2 flex items-center justify-between gap-3 z-30 relative">
         <div className="flex items-center gap-2">
-          <span className="font-display font-bold text-sm tracking-wider text-neutral-300 uppercase">
+          <span className={`font-display font-bold text-sm tracking-wider uppercase ${
+            isLight ? 'text-slate-800' : 'text-neutral-300'
+          }`}>
             Jubayer Links
           </span>
-          <span className="text-neutral-600" aria-hidden="true">·</span>
-          <span className="text-xs text-neutral-400 font-mono">Official Hub</span>
+          <span className={isLight ? 'text-slate-400' : 'text-neutral-600'} aria-hidden="true">·</span>
+          <span className={`text-xs font-mono ${isLight ? 'text-slate-500' : 'text-neutral-400'}`}>
+            Official Hub
+          </span>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Single Color Theme Icon Button with Popup Menu */}
+          <div className="relative" ref={colorMenuRef}>
+            <button
+              type="button"
+              onClick={() => {
+                playTapSound(soundEnabled);
+                setIsColorMenuOpen(!isColorMenuOpen);
+              }}
+              aria-label="Change color theme"
+              title="Click to change color (কালার চেঞ্জ করুন)"
+              className={`h-8 sm:h-9 px-2 sm:px-2.5 rounded-xl border flex items-center gap-1.5 transition-all active:scale-95 ${
+                isColorMenuOpen
+                  ? `${themeConfig.accentBg} shadow-md`
+                  : isLight
+                    ? 'bg-white hover:bg-slate-100 text-slate-800 border-slate-200 shadow-sm'
+                    : 'bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200 border-neutral-800 shadow-sm'
+              }`}
+            >
+              <Palette className="w-3.5 h-3.5" />
+              <span
+                className="w-2.5 h-2.5 rounded-full ring-1 ring-white/60 shadow-sm"
+                style={{ backgroundColor: themeConfig.badgeDot }}
+              />
+            </button>
+
+            {/* Horizontal Color Options - Pure Colors Only, No Text Names */}
+            {isColorMenuOpen && (
+              <div
+                className={`absolute right-0 top-full mt-2 p-1.5 rounded-2xl border shadow-2xl backdrop-blur-2xl z-50 flex items-center gap-1.5 animate-in fade-in zoom-in-95 duration-150 ${
+                  isLight
+                    ? 'bg-white/95 border-slate-200 shadow-slate-400/30'
+                    : 'bg-neutral-950/95 border-neutral-800 shadow-black/90'
+                }`}
+              >
+                {Object.keys(THEME_CONFIGS).map((key) => {
+                  const cfg = THEME_CONFIGS[key];
+                  const isSelected = currentTheme === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => {
+                        handleThemeChange(key as ThemePreset);
+                        setIsColorMenuOpen(false);
+                      }}
+                      aria-label={`Color option ${key}`}
+                      className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center transition-all active:scale-90 ${
+                        isSelected
+                          ? 'ring-2 ring-white scale-110 bg-white/20 shadow-sm'
+                          : 'hover:scale-105 opacity-80 hover:opacity-100'
+                      }`}
+                    >
+                      <span
+                        className={`w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full bg-gradient-to-tr ${cfg.swatchGradient} ring-1 ring-black/40 shadow-inner`}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Sound Toggle */}
           <button
             onClick={onToggleSound}
             aria-label={soundEnabled ? 'Mute tap audio' : 'Enable tap audio'}
             title={soundEnabled ? 'Mute audio feedback' : 'Enable audio feedback'}
-            className="w-9 h-9 rounded-xl bg-neutral-900/80 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-800 flex items-center justify-center transition-colors"
+            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl border flex items-center justify-center transition-colors ${
+              isLight
+                ? 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                : 'bg-neutral-900/80 hover:bg-neutral-800 text-neutral-300 hover:text-white border-neutral-800'
+            }`}
           >
-            {soundEnabled ? <Volume2 className="w-4 h-4 text-indigo-400" /> : <VolumeX className="w-4 h-4 text-neutral-500" />}
+            {soundEnabled ? (
+              <Volume2 className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${themeConfig.accentText}`} />
+            ) : (
+              <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-neutral-500" />
+            )}
           </button>
-
-          {/* Theme Quick Switcher */}
-          <div className="flex items-center bg-neutral-900/80 p-0.5 rounded-xl border border-neutral-800">
-            <button
-              onClick={() => {
-                playTapSound(soundEnabled);
-                onSelectTheme('obsidian');
-              }}
-              title="Obsidian Violet Theme"
-              className={`w-7 h-7 rounded-lg text-xs font-medium transition-all flex items-center justify-center ${
-                currentTheme === 'obsidian' ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/40' : 'text-neutral-400 hover:text-neutral-200'
-              }`}
-            >
-              <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block" />
-            </button>
-            <button
-              onClick={() => {
-                playTapSound(soundEnabled);
-                onSelectTheme('midnight');
-              }}
-              title="Midnight Cyan Theme"
-              className={`w-7 h-7 rounded-lg text-xs font-medium transition-all flex items-center justify-center ${
-                currentTheme === 'midnight' ? 'bg-cyan-600/30 text-cyan-300 border border-cyan-500/40' : 'text-neutral-400 hover:text-neutral-200'
-              }`}
-            >
-              <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 inline-block" />
-            </button>
-            <button
-              onClick={() => {
-                playTapSound(soundEnabled);
-                onSelectTheme('emerald');
-              }}
-              title="Cyber Emerald Theme"
-              className={`w-7 h-7 rounded-lg text-xs font-medium transition-all flex items-center justify-center ${
-                currentTheme === 'emerald' ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40' : 'text-neutral-400 hover:text-neutral-200'
-              }`}
-            >
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block" />
-            </button>
-          </div>
 
           {/* Share Profile Button */}
           <button
@@ -110,31 +173,47 @@ export function Header({
             }}
             aria-label="Share profile"
             title="Share Profile & QR Code"
-            className="h-9 px-3 rounded-xl bg-neutral-900/80 hover:bg-neutral-800 text-neutral-200 hover:text-white border border-neutral-800 flex items-center gap-1.5 text-xs font-medium transition-colors"
+            className={`h-8 sm:h-9 px-2.5 sm:px-3 rounded-xl border flex items-center gap-1.5 text-xs font-medium transition-colors ${
+              isLight
+                ? 'bg-white hover:bg-slate-100 text-slate-800 border-slate-200'
+                : 'bg-neutral-900/80 hover:bg-neutral-800 text-neutral-200 hover:text-white border-neutral-800'
+            }`}
           >
-            <Share2 className="w-3.5 h-3.5 text-indigo-400" />
+            <Share2 className={`w-3.5 h-3.5 ${themeConfig.accentText}`} />
             <span className="hidden xs:inline">Share</span>
           </button>
         </div>
       </div>
 
-      {/* Cover Banner with smooth gradient vignette */}
-      <div className="w-full max-w-2xl mx-auto px-4 pt-2">
-        <div className="relative h-40 sm:h-48 w-full rounded-3xl overflow-hidden border border-neutral-800/80 shadow-2xl bg-neutral-900">
-          {!coverError ? (
-            <img
-              src={profile.coverUrl}
-              alt="Jubayer Cover Banner"
-              referrerPolicy="no-referrer"
-              onError={() => setCoverError(true)}
-              className="w-full h-full object-cover object-center filter brightness-90 contrast-105"
-            />
-          ) : (
-            <div className="w-full h-full bg-gradient-to-r from-neutral-900 via-indigo-950/60 to-neutral-900 flex items-center justify-center" />
-          )}
+      {/* Cover Banner with stylized background using the artwork */}
+      <div className="w-full max-w-2xl mx-auto px-4 pt-1">
+        <div className="relative h-44 sm:h-52 w-full rounded-3xl overflow-hidden border border-neutral-800/80 shadow-2xl bg-neutral-950 flex items-center justify-center">
+          {/* Blurred wide ambient version of the artwork */}
+          <img
+            src={profile.coverUrl}
+            alt="Jubayer Ambient Backdrop"
+            referrerPolicy="no-referrer"
+            onError={() => setCoverError(true)}
+            className="absolute inset-0 w-full h-full object-cover object-center scale-150 filter blur-xl brightness-50 opacity-60"
+          />
 
-          {/* Scrim overlay for depth */}
-          <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/30 to-transparent" />
+          {/* Dynamic Theme Banner Gradient Split matching active color */}
+          <div className={`absolute inset-0 bg-gradient-to-r ${themeConfig.bannerGradient} pointer-events-none transition-all duration-500`} />
+
+          {/* Character motif in banner background */}
+          <div className="relative z-10 flex items-center justify-center opacity-85 hover:opacity-100 transition-opacity">
+            <div className={`w-24 h-24 sm:w-28 sm:h-28 rounded-full p-1 bg-gradient-to-tr ${themeConfig.avatarRing} shadow-2xl transition-all duration-500`}>
+              <img
+                src={profile.coverUrl}
+                alt="Jubayer Profile Art"
+                referrerPolicy="no-referrer"
+                className="w-full h-full rounded-full object-cover filter brightness-95"
+              />
+            </div>
+          </div>
+
+          {/* Vignette Scrim overlay for depth */}
+          <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/40 to-black/20 pointer-events-none" />
 
           {/* QR badge trigger on cover top right */}
           <button
@@ -142,7 +221,7 @@ export function Header({
               playTapSound(soundEnabled);
               onOpenShareModal();
             }}
-            className="absolute top-3 right-3 px-2.5 py-1.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white/90 hover:text-white text-xs flex items-center gap-1.5 transition-colors"
+            className="absolute top-3 right-3 px-2.5 py-1.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white/90 hover:text-white text-xs flex items-center gap-1.5 transition-colors z-20"
             title="View QR Code"
           >
             <QrCode className="w-3.5 h-3.5 text-indigo-300" />
@@ -151,12 +230,12 @@ export function Header({
         </div>
       </div>
 
-      {/* Profile Avatar & Identity Lockup */}
+      {/* Profile Avatar & Identity Lockup right above @JUBAYER */}
       <div className="w-full max-w-2xl mx-auto px-4 -mt-16 sm:-mt-20 relative z-10 flex flex-col items-center text-center">
         {/* Avatar with verified badge */}
         <div className="relative group cursor-pointer" onClick={handleCopyHandle}>
-          <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full p-1 bg-gradient-to-tr from-indigo-500 via-purple-500 to-cyan-400 shadow-2xl shadow-indigo-500/20">
-            <div className="w-full h-full rounded-full overflow-hidden bg-neutral-900 border-2 border-neutral-950 relative">
+          <div className={`w-28 h-28 sm:w-32 sm:h-32 rounded-full p-1 bg-gradient-to-tr ${themeConfig.avatarRing} shadow-2xl ring-4 ring-neutral-950 transition-all duration-500`}>
+            <div className="w-full h-full rounded-full overflow-hidden bg-neutral-950 border-2 border-neutral-900 relative flex items-center justify-center">
               {!imageError ? (
                 <img
                   src={profile.avatarUrl}
@@ -184,7 +263,9 @@ export function Header({
 
         {/* Profile Name */}
         <div className="mt-3 flex items-center justify-center gap-1.5">
-          <h1 className="text-2xl sm:text-3xl font-extrabold font-display tracking-tight text-white">
+          <h1 className={`text-2xl sm:text-3xl font-extrabold font-display tracking-tight ${
+            isLight ? 'text-slate-900' : 'text-white'
+          }`}>
             {profile.name}
           </h1>
         </div>
@@ -192,7 +273,9 @@ export function Header({
         {/* Handle Button with Quick Copy */}
         <button
           onClick={handleCopyHandle}
-          className="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-neutral-400 hover:text-indigo-400 transition-colors"
+          className={`mt-1 inline-flex items-center gap-1.5 text-sm font-medium transition-colors ${
+            isLight ? 'text-slate-600 hover:text-blue-600' : 'text-neutral-400 hover:text-white'
+          }`}
           title="Click to copy handle"
         >
           <span>{profile.handle}</span>
@@ -204,17 +287,21 @@ export function Header({
         </button>
 
         {/* Bio description */}
-        <p className="mt-2 text-sm sm:text-base text-neutral-300 max-w-md font-normal leading-relaxed">
+        <p className={`mt-2 text-sm sm:text-base max-w-md font-normal leading-relaxed ${
+          isLight ? 'text-slate-700' : 'text-neutral-300'
+        }`}>
           {profile.bio}
         </p>
 
-        {/* Clean unboxed metadata separator (Zero-Pill Discipline §1.A) */}
-        <div className="mt-3 flex items-center justify-center flex-wrap gap-2 text-xs text-neutral-400 font-medium">
+        {/* Clean unboxed metadata separator */}
+        <div className={`mt-3 flex items-center justify-center flex-wrap gap-2 text-xs font-medium ${
+          isLight ? 'text-slate-500' : 'text-neutral-400'
+        }`}>
           <span>Digital Creator</span>
           <span aria-hidden="true">·</span>
           <span>Official Social Channels</span>
           <span aria-hidden="true">·</span>
-          <span className="text-emerald-400">Verified</span>
+          <span className="text-emerald-500 font-semibold">Verified</span>
         </div>
       </div>
     </header>
