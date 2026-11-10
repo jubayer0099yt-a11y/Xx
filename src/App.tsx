@@ -9,7 +9,6 @@ import { ThemePreset } from './types';
 import { THEME_CONFIGS } from './data/themes';
 import { Language, TRANSLATIONS } from './data/i18n';
 import { Header } from './components/Header';
-import { VisitorCounter } from './components/VisitorCounter';
 import { QuickSocialStrip } from './components/QuickSocialStrip';
 import { FeaturedVideo } from './components/FeaturedVideo';
 import { CategoryFilter } from './components/CategoryFilter';
@@ -17,7 +16,6 @@ import { LinkCard } from './components/LinkCard';
 import { ContactCard } from './components/ContactCard';
 import { Footer } from './components/Footer';
 import { ShareModal } from './components/ShareModal';
-import { NotificationToast } from './components/NotificationToast';
 
 export default function App() {
   // Theme state with fallback to 'signature'
@@ -72,9 +70,8 @@ export default function App() {
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Modals & Notification state
+  // Modals state
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [notificationMsg, setNotificationMsg] = useState<string | null>(null);
 
   // Active theme configuration
   const themeConfig = useMemo(() => {
@@ -108,20 +105,14 @@ export default function App() {
     });
   };
 
-  // Language toggle handler with animated notification
+  // Language toggle handler
   const handleToggleLanguage = () => {
     const nextLang: Language = lang === 'en' ? 'bn' : 'en';
     setLang(nextLang);
-    showToast(TRANSLATIONS[nextLang].toastLangChanged);
   };
 
-  // Notification handler
-  const showToast = (msg: string) => {
-    setNotificationMsg(msg);
-    setTimeout(() => {
-      setNotificationMsg((current) => (current === msg ? null : current));
-    }, 2900);
-  };
+  // Silent handler (all popups disabled as requested)
+  const showToast = (_msg: string) => {};
 
   // Click counter handler
   const handleLinkClick = (id: string, url: string) => {
@@ -213,13 +204,8 @@ export default function App() {
           onToggleLanguage={handleToggleLanguage}
         />
 
-        {/* FEATURE 2: Real Synchronized Visitor Counter with Animation */}
+        {/* Quick Circular Social Icons Strip right below Profile Header */}
         <div className="w-full mt-3">
-          <VisitorCounter themeConfig={themeConfig} lang={lang} />
-        </div>
-
-        {/* Quick Circular Social Icons Strip */}
-        <div className="w-full mt-2">
           <QuickSocialStrip
             links={BIO_LINKS}
             onLinkClick={handleLinkClick}
@@ -313,13 +299,6 @@ export default function App() {
         soundEnabled={soundEnabled}
         onShowToast={showToast}
         lang={lang}
-      />
-
-      {/* FEATURE 4: Animated Notification System */}
-      <NotificationToast
-        message={notificationMsg}
-        onDismiss={() => setNotificationMsg(null)}
-        themeConfig={themeConfig}
       />
     </div>
   );

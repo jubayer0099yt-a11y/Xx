@@ -35,10 +35,9 @@ export function LinkCard({
       await navigator.clipboard.writeText(link.url);
       setCopied(true);
       playCopySound(soundEnabled);
-      onShowToast(t.toastCopiedLink(link.title));
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), 1800);
     } catch {
-      onShowToast('Could not copy link');
+      // Ignore copy error
     }
   };
 

@@ -29,10 +29,9 @@ export function ShareModal({
       await navigator.clipboard.writeText(currentUrl);
       setCopied(true);
       playCopySound(soundEnabled);
-      onShowToast(t.copiedProfileLink);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), 1800);
     } catch {
-      onShowToast('Failed to copy link');
+      // Ignore copy error
     }
   };
 

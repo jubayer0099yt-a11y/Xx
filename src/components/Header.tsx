@@ -60,10 +60,9 @@ export function Header({
       await navigator.clipboard.writeText(profile.handle);
       setCopiedHandle(true);
       playCopySound(soundEnabled);
-      onShowToast(t.toastCopiedHandle);
-      setTimeout(() => setCopiedHandle(false), 2000);
+      setTimeout(() => setCopiedHandle(false), 1800);
     } catch {
-      onShowToast('Could not copy handle');
+      // Ignore copy error
     }
   };
 

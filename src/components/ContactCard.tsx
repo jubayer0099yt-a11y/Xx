@@ -27,10 +27,9 @@ export function ContactCard({
       await navigator.clipboard.writeText(email);
       setCopied(true);
       playCopySound(soundEnabled);
-      onShowToast(t.toastCopiedEmail);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), 1800);
     } catch {
-      onShowToast('Could not copy email');
+      // Ignore copy error
     }
   };
 
