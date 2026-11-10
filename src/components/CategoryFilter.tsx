@@ -1,6 +1,7 @@
 import React from 'react';
 import { Search } from 'lucide-react';
 import { ThemeConfig } from '../data/themes';
+import { Language, TRANSLATIONS } from '../data/i18n';
 import { playTapSound } from '../utils/sound';
 
 interface CategoryFilterProps {
@@ -10,6 +11,7 @@ interface CategoryFilterProps {
   onSearchChange: (query: string) => void;
   soundEnabled: boolean;
   themeConfig: ThemeConfig;
+  lang?: Language;
 }
 
 export function CategoryFilter({
@@ -19,12 +21,15 @@ export function CategoryFilter({
   onSearchChange,
   soundEnabled,
   themeConfig,
+  lang = 'en',
 }: CategoryFilterProps) {
+  const t = TRANSLATIONS[lang];
+
   const categories = [
-    { id: 'all', label: 'All Links' },
-    { id: 'video', label: 'Video & Edits' },
-    { id: 'social', label: 'Socials' },
-    { id: 'chat', label: 'Direct Chat' },
+    { id: 'all', label: t.allLinks },
+    { id: 'video', label: t.videoCat },
+    { id: 'social', label: t.socialCat },
+    { id: 'chat', label: t.chatCat },
   ];
 
   const isLight = themeConfig.isLight;
@@ -33,16 +38,18 @@ export function CategoryFilter({
     <div className="w-full space-y-3 mb-4">
       {/* Search Input */}
       <div className="relative">
-        <div className={`absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none ${
-          isLight ? 'text-slate-400' : 'text-neutral-500'
-        }`}>
+        <div
+          className={`absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none ${
+            isLight ? 'text-slate-400' : 'text-neutral-500'
+          }`}
+        >
           <Search className="w-4 h-4" />
         </div>
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Filter channels or search links..."
+          placeholder={t.searchPlaceholder}
           className={`w-full h-11 pl-10 pr-4 rounded-xl border text-sm transition-all outline-none ${
             isLight
               ? 'bg-white/90 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shadow-sm'
@@ -56,17 +63,17 @@ export function CategoryFilter({
               isLight ? 'text-slate-400 hover:text-slate-700' : 'text-neutral-400 hover:text-white'
             }`}
           >
-            Clear
+            {t.clear}
           </button>
         )}
       </div>
 
       {/* Segmented Filter Buttons */}
-      <div className={`flex items-center gap-1.5 p-1 rounded-xl border overflow-x-auto no-scrollbar ${
-        isLight
-          ? 'bg-slate-100/90 border-slate-200'
-          : `bg-neutral-900/80 ${themeConfig.cardBorder}`
-      }`}>
+      <div
+        className={`flex items-center gap-1.5 p-1 rounded-xl border overflow-x-auto no-scrollbar ${
+          isLight ? 'bg-slate-100/90 border-slate-200' : `bg-neutral-900/80 ${themeConfig.cardBorder}`
+        }`}
+      >
         {categories.map((cat) => {
           const isActive = activeCategory === cat.id;
           return (

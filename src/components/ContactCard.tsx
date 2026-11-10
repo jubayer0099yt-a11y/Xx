@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Mail, Copy, Check, Send } from 'lucide-react';
 import { ThemeConfig } from '../data/themes';
+import { Language, TRANSLATIONS } from '../data/i18n';
 import { playCopySound, playTapSound } from '../utils/sound';
 
 interface ContactCardProps {
@@ -8,17 +9,25 @@ interface ContactCardProps {
   onShowToast: (msg: string) => void;
   soundEnabled: boolean;
   themeConfig: ThemeConfig;
+  lang?: Language;
 }
 
-export function ContactCard({ email, onShowToast, soundEnabled, themeConfig }: ContactCardProps) {
+export function ContactCard({
+  email,
+  onShowToast,
+  soundEnabled,
+  themeConfig,
+  lang = 'en',
+}: ContactCardProps) {
   const [copied, setCopied] = useState(false);
+  const t = TRANSLATIONS[lang];
 
   const handleCopyEmail = async () => {
     try {
       await navigator.clipboard.writeText(email);
       setCopied(true);
       playCopySound(soundEnabled);
-      onShowToast('Email copied to clipboard!');
+      onShowToast(t.toastCopiedEmail);
       setTimeout(() => setCopied(false), 2000);
     } catch {
       onShowToast('Could not copy email');
@@ -28,39 +37,43 @@ export function ContactCard({ email, onShowToast, soundEnabled, themeConfig }: C
   const isLight = themeConfig.isLight;
 
   return (
-    <div className={`w-full rounded-2xl border p-4 sm:p-5 mt-6 shadow-xl backdrop-blur-md transition-all ${
-      isLight
-        ? 'bg-white/90 border-slate-200 text-slate-900 shadow-slate-200/50'
-        : `${themeConfig.cardBg} ${themeConfig.cardBorder} text-neutral-200`
-    }`}>
+    <div
+      className={`w-full rounded-2xl border p-4 sm:p-5 mt-6 shadow-xl backdrop-blur-md transition-all ${
+        isLight
+          ? 'bg-white/90 border-slate-200 text-slate-900 shadow-slate-200/50'
+          : `${themeConfig.cardBg} ${themeConfig.cardBorder} text-neutral-200`
+      }`}
+    >
       <div className="flex items-center justify-between gap-3 mb-3">
         <div className="flex items-center gap-2.5">
-          <div className={`w-8 h-8 rounded-xl border flex items-center justify-center ${
-            isLight
-              ? 'bg-amber-100 text-amber-600 border-amber-200'
-              : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
-          }`}>
+          <div
+            className={`w-8 h-8 rounded-xl border flex items-center justify-center ${
+              isLight
+                ? 'bg-amber-100 text-amber-600 border-amber-200'
+                : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+            }`}
+          >
             <Mail className="w-4 h-4" />
           </div>
           <div>
-            <h4 className={`text-sm font-semibold font-display ${
-              isLight ? 'text-slate-900' : 'text-white'
-            }`}>
-              Direct Inquiries & Collabs
+            <h4 className={`text-sm font-semibold font-display ${isLight ? 'text-slate-900' : 'text-white'}`}>
+              {t.collabTitle}
             </h4>
             <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-neutral-400'}`}>
-              Available for sponsorships, edits & projects
+              {t.collabDesc}
             </p>
           </div>
         </div>
       </div>
 
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mt-2">
-        <div className={`flex-1 px-3.5 py-2.5 rounded-xl border text-xs font-mono truncate select-all flex items-center justify-between ${
-          isLight
-            ? 'bg-slate-50 border-slate-200 text-slate-800'
-            : 'bg-neutral-950/70 border-neutral-800 text-neutral-300'
-        }`}>
+        <div
+          className={`flex-1 px-3.5 py-2.5 rounded-xl border text-xs font-mono truncate select-all flex items-center justify-between ${
+            isLight
+              ? 'bg-slate-50 border-slate-200 text-slate-800'
+              : 'bg-neutral-950/70 border-neutral-800 text-neutral-300'
+          }`}
+        >
           <span className="truncate">{email}</span>
         </div>
 
@@ -75,7 +88,7 @@ export function ContactCard({ email, onShowToast, soundEnabled, themeConfig }: C
             title="Copy email address"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-            <span>{copied ? 'Copied' : 'Copy'}</span>
+            <span>{copied ? t.copied : t.copy}</span>
           </button>
 
           <a
@@ -84,7 +97,7 @@ export function ContactCard({ email, onShowToast, soundEnabled, themeConfig }: C
             className={`flex-1 sm:flex-none h-10 px-4 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-md ${themeConfig.accentBg}`}
           >
             <Send className="w-3.5 h-3.5" />
-            <span>Send Email</span>
+            <span>{t.sendEmail}</span>
           </a>
         </div>
       </div>

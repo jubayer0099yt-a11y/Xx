@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Share2, Volume2, VolumeX, Copy, Check, Palette } from 'lucide-react';
+import { Share2, Volume2, VolumeX, Copy, Check, Palette, Languages } from 'lucide-react';
 import { ProfileData, ThemePreset } from '../types';
 import { ThemeConfig, THEME_CONFIGS } from '../data/themes';
+import { Language, TRANSLATIONS } from '../data/i18n';
 import { VerifiedBadgeIcon } from './Icons';
 import { playCopySound, playTapSound } from '../utils/sound';
 
@@ -14,6 +15,8 @@ interface HeaderProps {
   currentTheme: ThemePreset;
   onSelectTheme: (theme: ThemePreset) => void;
   themeConfig: ThemeConfig;
+  lang: Language;
+  onToggleLanguage: () => void;
 }
 
 export function Header({
@@ -25,12 +28,17 @@ export function Header({
   currentTheme,
   onSelectTheme,
   themeConfig,
+  lang,
+  onToggleLanguage,
 }: HeaderProps) {
   const [copiedHandle, setCopiedHandle] = useState(false);
   const [coverError, setCoverError] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [isColorMenuOpen, setIsColorMenuOpen] = useState(false);
   const colorMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const t = TRANSLATIONS[lang];
+  const isLight = themeConfig.isLight;
 
   // Close color popover on click outside
   useEffect(() => {
@@ -52,7 +60,7 @@ export function Header({
       await navigator.clipboard.writeText(profile.handle);
       setCopiedHandle(true);
       playCopySound(soundEnabled);
-      onShowToast(`Copied ${profile.handle} to clipboard!`);
+      onShowToast(t.toastCopiedHandle);
       setTimeout(() => setCopiedHandle(false), 2000);
     } catch {
       onShowToast('Could not copy handle');
@@ -63,28 +71,49 @@ export function Header({
     playTapSound(soundEnabled);
     onSelectTheme(newTheme);
     const targetConfig = THEME_CONFIGS[newTheme];
-    onShowToast(`Theme changed to: ${targetConfig ? targetConfig.name : newTheme}`);
+    onShowToast(t.toastThemeChanged(targetConfig ? targetConfig.name : newTheme));
   };
-
-  const isLight = themeConfig.isLight;
 
   return (
     <header className="relative w-full">
       {/* Top utility row */}
       <div className="w-full max-w-2xl mx-auto px-4 pt-4 pb-2 flex items-center justify-between gap-3 z-30 relative">
         <div className="flex items-center gap-2">
-          <span className={`font-display font-bold text-sm tracking-wider uppercase ${
-            isLight ? 'text-slate-800' : 'text-neutral-300'
-          }`}>
-            Jubayer Links
+          <span
+            className={`font-display font-bold text-sm tracking-wider uppercase ${
+              isLight ? 'text-slate-800' : 'text-neutral-300'
+            }`}
+          >
+            {t.appTitle}
           </span>
-          <span className={isLight ? 'text-slate-400' : 'text-neutral-600'} aria-hidden="true">·</span>
+          <span className={isLight ? 'text-slate-400' : 'text-neutral-600'} aria-hidden="true">
+            ·
+          </span>
           <span className={`text-xs font-mono ${isLight ? 'text-slate-500' : 'text-neutral-400'}`}>
-            Official Hub
+            {t.officialHub}
           </span>
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Language Switcher Button (বাংলা / English) */}
+          <button
+            type="button"
+            onClick={() => {
+              playTapSound(soundEnabled);
+              onToggleLanguage();
+            }}
+            aria-label={t.languageTitle}
+            title={t.languageTitle}
+            className={`h-8 sm:h-9 px-2 sm:px-2.5 rounded-xl border flex items-center gap-1 text-xs font-semibold transition-all active:scale-95 ${
+              isLight
+                ? 'bg-white hover:bg-slate-100 text-slate-800 border-slate-200 shadow-sm'
+                : 'bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200 border-neutral-800 shadow-sm'
+            }`}
+          >
+            <Languages className={`w-3.5 h-3.5 ${themeConfig.accentText}`} />
+            <span className="font-bold text-[11px]">{t.languageToggle}</span>
+          </button>
+
           {/* Single Color Theme Icon Button with Popup Menu */}
           <div className="relative" ref={colorMenuRef}>
             <button
@@ -93,8 +122,8 @@ export function Header({
                 playTapSound(soundEnabled);
                 setIsColorMenuOpen(!isColorMenuOpen);
               }}
-              aria-label="Change color theme"
-              title="Click to change color (কালার চেঞ্জ করুন)"
+              aria-label={t.changeColor}
+              title={t.changeColor}
               className={`h-8 sm:h-9 px-2 sm:px-2.5 rounded-xl border flex items-center gap-1.5 transition-all active:scale-95 ${
                 isColorMenuOpen
                   ? `${themeConfig.accentBg} shadow-md`
@@ -130,7 +159,7 @@ export function Header({
                         handleThemeChange(key as ThemePreset);
                         setIsColorMenuOpen(false);
                       }}
-                      aria-label={`Color option ${key}`}
+                      aria-label={`Color ${key}`}
                       className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center transition-all active:scale-90 ${
                         isSelected
                           ? 'ring-2 ring-white scale-110 bg-white/20 shadow-sm'
@@ -171,8 +200,8 @@ export function Header({
               playTapSound(soundEnabled);
               onOpenShareModal();
             }}
-            aria-label="Share profile"
-            title="Share Profile"
+            aria-label={t.share}
+            title={t.share}
             className={`h-8 sm:h-9 px-2.5 sm:px-3 rounded-xl border flex items-center gap-1.5 text-xs font-medium transition-colors ${
               isLight
                 ? 'bg-white hover:bg-slate-100 text-slate-800 border-slate-200'
@@ -180,7 +209,7 @@ export function Header({
             }`}
           >
             <Share2 className={`w-3.5 h-3.5 ${themeConfig.accentText}`} />
-            <span className="hidden xs:inline">Share</span>
+            <span className="hidden xs:inline">{t.share}</span>
           </button>
         </div>
       </div>
@@ -198,11 +227,15 @@ export function Header({
           />
 
           {/* Dynamic Theme Banner Gradient Split matching active color */}
-          <div className={`absolute inset-0 bg-gradient-to-r ${themeConfig.bannerGradient} pointer-events-none transition-all duration-500`} />
+          <div
+            className={`absolute inset-0 bg-gradient-to-r ${themeConfig.bannerGradient} pointer-events-none transition-all duration-500`}
+          />
 
           {/* Character motif in banner background */}
           <div className="relative z-10 flex items-center justify-center opacity-85 hover:opacity-100 transition-opacity">
-            <div className={`w-24 h-24 sm:w-28 sm:h-28 rounded-full p-1 bg-gradient-to-tr ${themeConfig.avatarRing} shadow-2xl transition-all duration-500`}>
+            <div
+              className={`w-24 h-24 sm:w-28 sm:h-28 rounded-full p-1 bg-gradient-to-tr ${themeConfig.avatarRing} shadow-2xl transition-all duration-500`}
+            >
               <img
                 src={profile.coverUrl}
                 alt="Jubayer Profile Art"
@@ -221,7 +254,9 @@ export function Header({
       <div className="w-full max-w-2xl mx-auto px-4 -mt-16 sm:-mt-20 relative z-10 flex flex-col items-center text-center">
         {/* Avatar with verified badge */}
         <div className="relative group cursor-pointer" onClick={handleCopyHandle}>
-          <div className={`w-28 h-28 sm:w-32 sm:h-32 rounded-full p-1 bg-gradient-to-tr ${themeConfig.avatarRing} shadow-2xl ring-4 ring-neutral-950 transition-all duration-500`}>
+          <div
+            className={`w-28 h-28 sm:w-32 sm:h-32 rounded-full p-1 bg-gradient-to-tr ${themeConfig.avatarRing} shadow-2xl ring-4 ring-neutral-950 transition-all duration-500`}
+          >
             <div className="w-full h-full rounded-full overflow-hidden bg-neutral-950 border-2 border-neutral-900 relative flex items-center justify-center">
               {!imageError ? (
                 <img
@@ -242,7 +277,7 @@ export function Header({
           {/* Verified Badge */}
           <div
             className="absolute bottom-1 right-1 w-8 h-8 rounded-full bg-blue-500 text-white border-2 border-neutral-950 flex items-center justify-center shadow-lg"
-            title="Verified Creator Profile"
+            title={t.tagVerified}
           >
             <VerifiedBadgeIcon className="w-5 h-5 text-white" />
           </div>
@@ -250,9 +285,11 @@ export function Header({
 
         {/* Profile Name */}
         <div className="mt-3 flex items-center justify-center gap-1.5">
-          <h1 className={`text-2xl sm:text-3xl font-extrabold font-display tracking-tight ${
-            isLight ? 'text-slate-900' : 'text-white'
-          }`}>
+          <h1
+            className={`text-2xl sm:text-3xl font-extrabold font-display tracking-tight ${
+              isLight ? 'text-slate-900' : 'text-white'
+            }`}
+          >
             {profile.name}
           </h1>
         </div>
@@ -273,22 +310,26 @@ export function Header({
           )}
         </button>
 
-        {/* Bio description */}
-        <p className={`mt-2 text-sm sm:text-base max-w-md font-normal leading-relaxed ${
-          isLight ? 'text-slate-700' : 'text-neutral-300'
-        }`}>
-          {profile.bio}
+        {/* Bio description in active language */}
+        <p
+          className={`mt-2 text-sm sm:text-base max-w-md font-normal leading-relaxed ${
+            isLight ? 'text-slate-700' : 'text-neutral-300'
+          }`}
+        >
+          {t.bio}
         </p>
 
         {/* Clean unboxed metadata separator */}
-        <div className={`mt-3 flex items-center justify-center flex-wrap gap-2 text-xs font-medium ${
-          isLight ? 'text-slate-500' : 'text-neutral-400'
-        }`}>
-          <span>Digital Creator</span>
+        <div
+          className={`mt-3 flex items-center justify-center flex-wrap gap-2 text-xs font-medium ${
+            isLight ? 'text-slate-500' : 'text-neutral-400'
+          }`}
+        >
+          <span>{t.tagDigitalCreator}</span>
           <span aria-hidden="true">·</span>
-          <span>Official Social Channels</span>
+          <span>{t.tagOfficialChannels}</span>
           <span aria-hidden="true">·</span>
-          <span className="text-emerald-500 font-semibold">Verified</span>
+          <span className="text-emerald-500 font-semibold">{t.tagVerified}</span>
         </div>
       </div>
     </header>

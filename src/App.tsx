@@ -7,14 +7,17 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { BIO_LINKS, PROFILE_DATA } from './data/links';
 import { ThemePreset } from './types';
 import { THEME_CONFIGS } from './data/themes';
+import { Language, TRANSLATIONS } from './data/i18n';
 import { Header } from './components/Header';
+import { VisitorCounter } from './components/VisitorCounter';
 import { QuickSocialStrip } from './components/QuickSocialStrip';
+import { FeaturedVideo } from './components/FeaturedVideo';
 import { CategoryFilter } from './components/CategoryFilter';
 import { LinkCard } from './components/LinkCard';
 import { ContactCard } from './components/ContactCard';
 import { Footer } from './components/Footer';
 import { ShareModal } from './components/ShareModal';
-import { Toast } from './components/Toast';
+import { NotificationToast } from './components/NotificationToast';
 
 export default function App() {
   // Theme state with fallback to 'signature'
@@ -26,6 +29,17 @@ export default function App() {
       }
     }
     return 'signature';
+  });
+
+  // Language state (Bangla or English)
+  const [lang, setLang] = useState<Language>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('jubayer_lang') as Language | null;
+      if (saved === 'en' || saved === 'bn') {
+        return saved;
+      }
+    }
+    return 'bn'; // Default to Bengali as requested
   });
 
   // Sound preference state
@@ -58,14 +72,16 @@ export default function App() {
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Modals & Toast states
+  // Modals & Notification state
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [notificationMsg, setNotificationMsg] = useState<string | null>(null);
 
   // Active theme configuration
   const themeConfig = useMemo(() => {
     return THEME_CONFIGS[theme] || THEME_CONFIGS.signature;
   }, [theme]);
+
+  const t = TRANSLATIONS[lang];
 
   // Sync theme to localStorage and html tag
   useEffect(() => {
@@ -78,6 +94,11 @@ export default function App() {
     }
   }, [theme, themeConfig]);
 
+  // Sync language to localStorage
+  useEffect(() => {
+    localStorage.setItem('jubayer_lang', lang);
+  }, [lang]);
+
   // Sound preference toggle
   const toggleSound = () => {
     setSoundEnabled((prev) => {
@@ -87,12 +108,19 @@ export default function App() {
     });
   };
 
-  // Toast handler
+  // Language toggle handler with animated notification
+  const handleToggleLanguage = () => {
+    const nextLang: Language = lang === 'en' ? 'bn' : 'en';
+    setLang(nextLang);
+    showToast(TRANSLATIONS[nextLang].toastLangChanged);
+  };
+
+  // Notification handler
   const showToast = (msg: string) => {
-    setToastMessage(msg);
+    setNotificationMsg(msg);
     setTimeout(() => {
-      setToastMessage((current) => (current === msg ? null : current));
-    }, 2800);
+      setNotificationMsg((current) => (current === msg ? null : current));
+    }, 2900);
   };
 
   // Click counter handler
@@ -171,7 +199,7 @@ export default function App() {
 
       {/* Main Content Container */}
       <main className="w-full max-w-2xl mx-auto px-4 pb-16 flex flex-col items-center">
-        {/* Profile Header with Interactive Color Switcher */}
+        {/* Profile Header with Color Switcher and Language Toggle */}
         <Header
           profile={PROFILE_DATA}
           soundEnabled={soundEnabled}
@@ -181,16 +209,31 @@ export default function App() {
           currentTheme={theme}
           onSelectTheme={setTheme}
           themeConfig={themeConfig}
+          lang={lang}
+          onToggleLanguage={handleToggleLanguage}
         />
 
-        {/* Quick Circular Social Icons Strip */}
+        {/* FEATURE 2: Real Synchronized Visitor Counter with Animation */}
         <div className="w-full mt-3">
+          <VisitorCounter themeConfig={themeConfig} lang={lang} />
+        </div>
+
+        {/* Quick Circular Social Icons Strip */}
+        <div className="w-full mt-2">
           <QuickSocialStrip
             links={BIO_LINKS}
             onLinkClick={handleLinkClick}
             soundEnabled={soundEnabled}
           />
         </div>
+
+        {/* FEATURE 1: Featured Video Player (YouTube & Facebook Reels) */}
+        <FeaturedVideo
+          themeConfig={themeConfig}
+          lang={lang}
+          soundEnabled={soundEnabled}
+          onShowToast={showToast}
+        />
 
         {/* Search & Category Filter */}
         <div className="w-full mt-3">
@@ -201,6 +244,7 @@ export default function App() {
             onSearchChange={setSearchQuery}
             soundEnabled={soundEnabled}
             themeConfig={themeConfig}
+            lang={lang}
           />
         </div>
 
@@ -216,15 +260,20 @@ export default function App() {
                 onShowToast={showToast}
                 soundEnabled={soundEnabled}
                 themeConfig={themeConfig}
+                lang={lang}
               />
             ))
           ) : (
-            <div className={`w-full py-12 text-center rounded-2xl border ${
-              themeConfig.isLight
-                ? 'bg-white/80 border-slate-200 text-slate-600'
-                : 'bg-neutral-900/40 border-neutral-800 text-neutral-400'
-            }`}>
-              <p className="text-sm font-medium">No links matching "{searchQuery}"</p>
+            <div
+              className={`w-full py-12 text-center rounded-2xl border ${
+                themeConfig.isLight
+                  ? 'bg-white/80 border-slate-200 text-slate-600'
+                  : 'bg-neutral-900/40 border-neutral-800 text-neutral-400'
+              }`}
+            >
+              <p className="text-sm font-medium">
+                {t.noLinksFound} "{searchQuery}"
+              </p>
               <button
                 onClick={() => {
                   setSearchQuery('');
@@ -232,7 +281,7 @@ export default function App() {
                 }}
                 className={`mt-2 text-xs font-semibold ${themeConfig.accentText}`}
               >
-                Reset filters
+                {t.resetFilters}
               </button>
             </div>
           )}
@@ -244,6 +293,7 @@ export default function App() {
           onShowToast={showToast}
           soundEnabled={soundEnabled}
           themeConfig={themeConfig}
+          lang={lang}
         />
 
         {/* Footer */}
@@ -252,19 +302,25 @@ export default function App() {
           onOpenShareModal={() => setIsShareModalOpen(true)}
           soundEnabled={soundEnabled}
           themeConfig={themeConfig}
+          lang={lang}
         />
       </main>
 
-      {/* Share & QR Code Modal */}
+      {/* Share Modal */}
       <ShareModal
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
         soundEnabled={soundEnabled}
         onShowToast={showToast}
+        lang={lang}
       />
 
-      {/* Toast Notification */}
-      <Toast message={toastMessage} />
+      {/* FEATURE 4: Animated Notification System */}
+      <NotificationToast
+        message={notificationMsg}
+        onDismiss={() => setNotificationMsg(null)}
+        themeConfig={themeConfig}
+      />
     </div>
   );
 }
