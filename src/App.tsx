@@ -7,11 +7,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { BIO_LINKS, PROFILE_DATA } from './data/links';
 import { ThemePreset } from './types';
 import { THEME_CONFIGS } from './data/themes';
-import { Language, TRANSLATIONS } from './data/i18n';
+import { Language } from './data/i18n';
 import { Header } from './components/Header';
 import { QuickSocialStrip } from './components/QuickSocialStrip';
-import { FeaturedVideo } from './components/FeaturedVideo';
-import { CategoryFilter } from './components/CategoryFilter';
 import { LinkCard } from './components/LinkCard';
 import { ContactCard } from './components/ContactCard';
 import { Footer } from './components/Footer';
@@ -66,10 +64,6 @@ export default function App() {
     return initial;
   });
 
-  // Search & category filter states
-  const [activeCategory, setActiveCategory] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-
   // Modals state
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
@@ -77,8 +71,6 @@ export default function App() {
   const themeConfig = useMemo(() => {
     return THEME_CONFIGS[theme] || THEME_CONFIGS.signature;
   }, [theme]);
-
-  const t = TRANSLATIONS[lang];
 
   // Sync theme to localStorage and html tag
   useEffect(() => {
@@ -105,10 +97,9 @@ export default function App() {
     });
   };
 
-  // Language toggle handler
-  const handleToggleLanguage = () => {
-    const nextLang: Language = lang === 'en' ? 'bn' : 'en';
-    setLang(nextLang);
+  // Language selection handler
+  const handleSelectLanguage = (newLang: Language) => {
+    setLang(newLang);
   };
 
   // Silent handler (all popups disabled as requested)
@@ -130,26 +121,7 @@ export default function App() {
     });
   };
 
-  // Filtered links
-  const filteredLinks = useMemo(() => {
-    return BIO_LINKS.filter((link) => {
-      // Category filter
-      if (activeCategory !== 'all') {
-        if (activeCategory === 'video' && link.category !== 'video') return false;
-        if (activeCategory === 'social' && link.category !== 'social') return false;
-        if (activeCategory === 'chat' && link.category !== 'chat') return false;
-      }
-      // Search filter
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        const matchesTitle = link.title.toLowerCase().includes(query);
-        const matchesSub = link.subtitle.toLowerCase().includes(query);
-        const matchesPlatform = link.platform.toLowerCase().includes(query);
-        if (!matchesTitle && !matchesSub && !matchesPlatform) return false;
-      }
-      return true;
-    });
-  }, [activeCategory, searchQuery]);
+
 
   return (
     <div
@@ -201,7 +173,7 @@ export default function App() {
           onSelectTheme={setTheme}
           themeConfig={themeConfig}
           lang={lang}
-          onToggleLanguage={handleToggleLanguage}
+          onSelectLanguage={handleSelectLanguage}
         />
 
         {/* Quick Circular Social Icons Strip right below Profile Header */}
@@ -213,64 +185,20 @@ export default function App() {
           />
         </div>
 
-        {/* FEATURE 1: Featured Video Player (YouTube & Facebook Reels) */}
-        <FeaturedVideo
-          themeConfig={themeConfig}
-          lang={lang}
-          soundEnabled={soundEnabled}
-          onShowToast={showToast}
-        />
-
-        {/* Search & Category Filter */}
-        <div className="w-full mt-3">
-          <CategoryFilter
-            activeCategory={activeCategory}
-            onSelectCategory={setActiveCategory}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            soundEnabled={soundEnabled}
-            themeConfig={themeConfig}
-            lang={lang}
-          />
-        </div>
-
         {/* Bio Link Cards Feed */}
-        <section className="w-full space-y-3 mt-1" aria-label="Official Links">
-          {filteredLinks.length > 0 ? (
-            filteredLinks.map((link) => (
-              <LinkCard
-                key={link.id}
-                link={link}
-                clicks={clicks[link.id] || link.defaultClicks}
-                onLinkClick={handleLinkClick}
-                onShowToast={showToast}
-                soundEnabled={soundEnabled}
-                themeConfig={themeConfig}
-                lang={lang}
-              />
-            ))
-          ) : (
-            <div
-              className={`w-full py-12 text-center rounded-2xl border ${
-                themeConfig.isLight
-                  ? 'bg-white/80 border-slate-200 text-slate-600'
-                  : 'bg-neutral-900/40 border-neutral-800 text-neutral-400'
-              }`}
-            >
-              <p className="text-sm font-medium">
-                {t.noLinksFound} "{searchQuery}"
-              </p>
-              <button
-                onClick={() => {
-                  setSearchQuery('');
-                  setActiveCategory('all');
-                }}
-                className={`mt-2 text-xs font-semibold ${themeConfig.accentText}`}
-              >
-                {t.resetFilters}
-              </button>
-            </div>
-          )}
+        <section className="w-full space-y-3 mt-4" aria-label="Official Links">
+          {BIO_LINKS.map((link) => (
+            <LinkCard
+              key={link.id}
+              link={link}
+              clicks={clicks[link.id] || link.defaultClicks}
+              onLinkClick={handleLinkClick}
+              onShowToast={showToast}
+              soundEnabled={soundEnabled}
+              themeConfig={themeConfig}
+              lang={lang}
+            />
+          ))}
         </section>
 
         {/* Direct Email / Inquiries Card */}

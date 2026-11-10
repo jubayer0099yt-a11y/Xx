@@ -192,8 +192,8 @@ export function LinkCard({
           <button
             type="button"
             onClick={handleCopyLink}
-            aria-label={`Copy link for ${link.title}`}
-            title={`Copy ${link.title} URL`}
+            aria-label={lang === 'bn' ? `${link.title} লিংক কপি করুন` : `Copy link for ${link.title}`}
+            title={lang === 'bn' ? `${link.title} লিংক কপি করুন` : `Copy ${link.title} URL`}
             className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all opacity-80 group-hover:opacity-100 ${
               isLight
                 ? 'bg-slate-100 hover:bg-slate-200 text-slate-600'

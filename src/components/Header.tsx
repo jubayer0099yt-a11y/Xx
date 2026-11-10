@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Share2, Volume2, VolumeX, Copy, Check, Palette, Languages } from 'lucide-react';
+import { Share2, Volume2, VolumeX, Copy, Check, Palette } from 'lucide-react';
 import { ProfileData, ThemePreset } from '../types';
 import { ThemeConfig, THEME_CONFIGS } from '../data/themes';
 import { Language, TRANSLATIONS } from '../data/i18n';
@@ -16,7 +16,7 @@ interface HeaderProps {
   onSelectTheme: (theme: ThemePreset) => void;
   themeConfig: ThemeConfig;
   lang: Language;
-  onToggleLanguage: () => void;
+  onSelectLanguage: (lang: Language) => void;
 }
 
 export function Header({
@@ -29,7 +29,7 @@ export function Header({
   onSelectTheme,
   themeConfig,
   lang,
-  onToggleLanguage,
+  onSelectLanguage,
 }: HeaderProps) {
   const [copiedHandle, setCopiedHandle] = useState(false);
   const [coverError, setCoverError] = useState(false);
@@ -79,39 +79,60 @@ export function Header({
       <div className="w-full max-w-2xl mx-auto px-4 pt-4 pb-2 flex items-center justify-between gap-3 z-30 relative">
         <div className="flex items-center gap-2">
           <span
-            className={`font-display font-bold text-sm tracking-wider uppercase ${
-              isLight ? 'text-slate-800' : 'text-neutral-300'
+            className={`font-display font-bold text-sm tracking-wide ${
+              isLight ? 'text-slate-900' : 'text-white'
             }`}
           >
             {t.appTitle}
           </span>
-          <span className={isLight ? 'text-slate-400' : 'text-neutral-600'} aria-hidden="true">
-            ·
-          </span>
-          <span className={`text-xs font-mono ${isLight ? 'text-slate-500' : 'text-neutral-400'}`}>
-            {t.officialHub}
-          </span>
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Language Switcher Button (বাংলা / English) */}
-          <button
-            type="button"
-            onClick={() => {
-              playTapSound(soundEnabled);
-              onToggleLanguage();
-            }}
-            aria-label={t.languageTitle}
-            title={t.languageTitle}
-            className={`h-8 sm:h-9 px-2 sm:px-2.5 rounded-xl border flex items-center gap-1 text-xs font-semibold transition-all active:scale-95 ${
+          {/* Full Language Switcher: [ বাংলা | English ] */}
+          <div
+            className={`h-8 sm:h-9 p-0.5 rounded-xl border flex items-center shadow-sm ${
               isLight
-                ? 'bg-white hover:bg-slate-100 text-slate-800 border-slate-200 shadow-sm'
-                : 'bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200 border-neutral-800 shadow-sm'
+                ? 'bg-slate-100/90 border-slate-200'
+                : 'bg-neutral-900/90 border-neutral-800'
             }`}
+            role="group"
+            aria-label="Language selection"
           >
-            <Languages className={`w-3.5 h-3.5 ${themeConfig.accentText}`} />
-            <span className="font-bold text-[11px]">{t.languageToggle}</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => {
+                playTapSound(soundEnabled);
+                onSelectLanguage('bn');
+              }}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all duration-150 ${
+                lang === 'bn'
+                  ? `${themeConfig.accentBg} ${themeConfig.accentText} font-bold shadow-sm`
+                  : isLight
+                    ? 'text-slate-600 hover:text-slate-900'
+                    : 'text-neutral-400 hover:text-white'
+              }`}
+              title="বাংলা ভাষা নির্বাচন করুন"
+            >
+              বাংলা
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                playTapSound(soundEnabled);
+                onSelectLanguage('en');
+              }}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all duration-150 ${
+                lang === 'en'
+                  ? `${themeConfig.accentBg} ${themeConfig.accentText} font-bold shadow-sm`
+                  : isLight
+                    ? 'text-slate-600 hover:text-slate-900'
+                    : 'text-neutral-400 hover:text-white'
+              }`}
+              title="Select English language"
+            >
+              English
+            </button>
+          </div>
 
           {/* Single Color Theme Icon Button with Popup Menu */}
           <div className="relative" ref={colorMenuRef}>
@@ -299,7 +320,7 @@ export function Header({
           className={`mt-1 inline-flex items-center gap-1.5 text-sm font-medium transition-colors ${
             isLight ? 'text-slate-600 hover:text-blue-600' : 'text-neutral-400 hover:text-white'
           }`}
-          title="Click to copy handle"
+          title={t.copyHandle}
         >
           <span>{profile.handle}</span>
           {copiedHandle ? (
@@ -311,25 +332,12 @@ export function Header({
 
         {/* Bio description in active language */}
         <p
-          className={`mt-2 text-sm sm:text-base max-w-md font-normal leading-relaxed ${
+          className={`mt-2.5 text-sm sm:text-base max-w-md font-normal leading-relaxed whitespace-pre-line px-2 ${
             isLight ? 'text-slate-700' : 'text-neutral-300'
           }`}
         >
           {t.bio}
         </p>
-
-        {/* Clean unboxed metadata separator */}
-        <div
-          className={`mt-3 flex items-center justify-center flex-wrap gap-2 text-xs font-medium ${
-            isLight ? 'text-slate-500' : 'text-neutral-400'
-          }`}
-        >
-          <span>{t.tagDigitalCreator}</span>
-          <span aria-hidden="true">·</span>
-          <span>{t.tagOfficialChannels}</span>
-          <span aria-hidden="true">·</span>
-          <span className="text-emerald-500 font-semibold">{t.tagVerified}</span>
-        </div>
       </div>
     </header>
   );

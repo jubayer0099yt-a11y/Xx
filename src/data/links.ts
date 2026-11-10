@@ -3,7 +3,7 @@ import { BioLink, ProfileData } from '../types';
 export const PROFILE_DATA: ProfileData = {
   name: 'JUBAYER',
   handle: '@JUBAYER',
-  bio: 'Welcome to my official links',
+  bio: 'Welcome to my little world! ❤️\nHere I share my moments, creations and everything I love. Stay connected! ✨',
   verified: true,
   avatarUrl: '/assets/aistudio/39727-removebg-preview_bf8db067.png',
   coverUrl: '/assets/aistudio/39727-removebg-preview_bf8db067.png',
