@@ -11,7 +11,6 @@ import { Language } from './data/i18n';
 import { Header } from './components/Header';
 import { QuickSocialStrip } from './components/QuickSocialStrip';
 import { LinkCard } from './components/LinkCard';
-import { PlayfulCat } from './components/PlayfulCat';
 import { Footer } from './components/Footer';
 import { ShareModal } from './components/ShareModal';
 
@@ -200,13 +199,6 @@ export default function App() {
             />
           ))}
         </section>
-
-        {/* Animated Playful Cat Section */}
-        <PlayfulCat
-          themeConfig={themeConfig}
-          lang={lang}
-          soundEnabled={soundEnabled}
-        />
 
         {/* Footer */}
         <Footer
