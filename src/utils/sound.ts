@@ -76,3 +76,33 @@ export function playCopySound(enabled: boolean = true) {
     // Ignore
   }
 }
+
+export function playKittySound(enabled: boolean = true) {
+  if (!enabled) return;
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sine';
+    // Gentle kitten chirp: gentle rise then fall
+    osc.frequency.setValueAtTime(680, now);
+    osc.frequency.exponentialRampToValueAtTime(920, now + 0.08);
+    osc.frequency.exponentialRampToValueAtTime(540, now + 0.22);
+
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.045, now + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.22);
+  } catch {
+    // Ignore
+  }
+}
