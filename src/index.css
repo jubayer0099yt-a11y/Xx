@@ -127,12 +127,47 @@
   animation: sunbeamPulse 6.5s ease-in-out infinite;
 }
 
+@keyframes musicEqBar1 {
+  0%, 100% { transform: scaleY(0.32); }
+  50% { transform: scaleY(0.95); }
+}
+
+@keyframes musicEqBar2 {
+  0%, 100% { transform: scaleY(0.85); }
+  45% { transform: scaleY(0.28); }
+  75% { transform: scaleY(1); }
+}
+
+@keyframes musicEqBar3 {
+  0%, 100% { transform: scaleY(0.45); }
+  35% { transform: scaleY(0.92); }
+  70% { transform: scaleY(0.3); }
+}
+
+.animate-music-eq-1 {
+  animation: musicEqBar1 0.9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  transform-origin: bottom;
+}
+
+.animate-music-eq-2 {
+  animation: musicEqBar2 0.78s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  transform-origin: bottom;
+}
+
+.animate-music-eq-3 {
+  animation: musicEqBar3 1.02s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  transform-origin: bottom;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-lantern-flicker,
   .animate-vine-sway,
   .animate-vine-sway-soft,
   .animate-firefly,
-  .animate-sunbeam-pulse {
+  .animate-sunbeam-pulse,
+  .animate-music-eq-1,
+  .animate-music-eq-2,
+  .animate-music-eq-3 {
     animation: none !important;
   }
 }

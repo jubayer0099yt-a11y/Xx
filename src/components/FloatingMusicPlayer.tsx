@@ -1,13 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Play,
   Pause,
   SkipBack,
   SkipForward,
-  Volume2,
-  VolumeX,
   Music2,
 } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import { MusicTrack } from '../data/music';
 import { ThemeConfig } from '../data/themes';
 import { Language, TRANSLATIONS } from '../data/i18n';
@@ -27,6 +26,35 @@ function formatTime(sec: number): string {
   return `${m}:${s < 10 ? '0' : ''}${s}`;
 }
 
+function EqualizerBars({ active, compact = false }: { active: boolean; compact?: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-end justify-center ${
+        compact ? 'gap-[1.5px] h-2.5' : 'gap-[2px] h-3.5'
+      }`}
+      aria-hidden="true"
+    >
+      <span
+        className={`w-[2px] h-full rounded-full transition-transform duration-300 ${
+          active ? 'bg-amber-400 animate-music-eq-1' : 'bg-amber-300/45 scale-y-[0.35]'
+        }`}
+      />
+      <span
+        className={`w-[2px] h-full rounded-full transition-transform duration-300 ${
+          active ? 'bg-amber-300 animate-music-eq-2' : 'bg-amber-300/45 scale-y-[0.55]'
+        }`}
+      />
+      <span
+        className={`w-[2px] h-full rounded-full transition-transform duration-300 ${
+          active ? 'bg-amber-400 animate-music-eq-3' : 'bg-amber-300/45 scale-y-[0.4]'
+        }`}
+      />
+    </span>
+  );
+}
+
+const TARGET_VOLUME = 0.8;
+
 export function FloatingMusicPlayer({
   tracks,
   soundEnabled,
@@ -39,6 +67,7 @@ export function FloatingMusicPlayer({
   const menuRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playButtonRef = useRef<HTMLButtonElement | null>(null);
+  const fadeRafRef = useRef<number | null>(null);
   const userPausedRef = useRef(false);
   const autoplayResolvedRef = useRef(false);
 
@@ -47,12 +76,57 @@ export function FloatingMusicPlayer({
   const [isOpen, setIsOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(0.75);
-  const [isMuted, setIsMuted] = useState(false);
   const [hasLoadError, setHasLoadError] = useState(false);
 
   const hasTracks = tracks.length > 0;
   const currentTrack = hasTracks ? tracks[currentIndex % tracks.length] : null;
+
+  // Smooth volume ramp helper for silky fade-in and fade-out
+  const fadeAudioTo = useCallback(
+    (targetVolume: number, durationMs: number, onComplete?: () => void) => {
+      const audio = audioRef.current;
+      if (!audio) {
+        onComplete?.();
+        return;
+      }
+
+      if (fadeRafRef.current !== null) {
+        cancelAnimationFrame(fadeRafRef.current);
+        fadeRafRef.current = null;
+      }
+
+      const startVolume = audio.volume;
+      const startTime = performance.now();
+
+      const step = (now: number) => {
+        const elapsed = now - startTime;
+        const progress = Math.min(1, elapsed / durationMs);
+        // Smooth easeOutCubic
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const nextVol = startVolume + (targetVolume - startVolume) * eased;
+        audio.volume = Math.max(0, Math.min(1, nextVol));
+
+        if (progress < 1) {
+          fadeRafRef.current = requestAnimationFrame(step);
+        } else {
+          fadeRafRef.current = null;
+          onComplete?.();
+        }
+      };
+
+      fadeRafRef.current = requestAnimationFrame(step);
+    },
+    []
+  );
+
+  // Cancel active fade RAF on unmount
+  useEffect(() => {
+    return () => {
+      if (fadeRafRef.current !== null) {
+        cancelAnimationFrame(fadeRafRef.current);
+      }
+    };
+  }, []);
 
   // Close popover when clicking outside or pressing Escape (audio keeps playing)
   useEffect(() => {
@@ -81,7 +155,7 @@ export function FloatingMusicPlayer({
   }, [isOpen]);
 
   // Attempt automatic playback on initial entry; if browser policy blocks unmuted autoplay,
-  // automatically start on the user's very first interaction anywhere on the page.
+  // automatically start smoothly on the user's very first interaction anywhere on the page.
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !hasTracks || autoplayResolvedRef.current) return;
@@ -100,8 +174,8 @@ export function FloatingMusicPlayer({
       if (!targetAudio || isDisposed || userPausedRef.current || autoplayResolvedRef.current) {
         return;
       }
-      targetAudio.volume = isMuted ? 0 : volume;
-      targetAudio.muted = isMuted;
+      targetAudio.volume = 0.02;
+      targetAudio.muted = false;
 
       const playPromise = targetAudio.play();
       if (playPromise && typeof playPromise.then === 'function') {
@@ -111,6 +185,7 @@ export function FloatingMusicPlayer({
             autoplayResolvedRef.current = true;
             setIsPlaying(true);
             setHasLoadError(false);
+            fadeAudioTo(TARGET_VOLUME, 450);
             cleanupListeners();
           })
           .catch(() => {
@@ -145,17 +220,9 @@ export function FloatingMusicPlayer({
       isDisposed = true;
       cleanupListeners();
     };
-  }, [hasTracks]);
+  }, [hasTracks, fadeAudioTo]);
 
-  // Keep audio element volume/mute in sync
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.volume = isMuted ? 0 : volume;
-    audio.muted = isMuted;
-  }, [volume, isMuted]);
-
-  // Trigger play when switching tracks if playing
+  // Trigger smooth fade-in when switching tracks while playing
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !currentTrack) return;
@@ -163,14 +230,19 @@ export function FloatingMusicPlayer({
     setHasLoadError(false);
 
     if (isPlaying) {
+      audio.volume = 0.02;
       const playPromise = audio.play();
-      if (playPromise && typeof playPromise.catch === 'function') {
-        playPromise.catch(() => {
-          setIsPlaying(false);
-        });
+      if (playPromise && typeof playPromise.then === 'function') {
+        playPromise
+          .then(() => {
+            fadeAudioTo(TARGET_VOLUME, 320);
+          })
+          .catch(() => {
+            setIsPlaying(false);
+          });
       }
     }
-  }, [currentIndex, currentTrack]);
+  }, [currentIndex, currentTrack, fadeAudioTo]);
 
   const handleTogglePlay = () => {
     const audio = audioRef.current;
@@ -180,17 +252,22 @@ export function FloatingMusicPlayer({
     if (isPlaying) {
       userPausedRef.current = true;
       autoplayResolvedRef.current = true;
-      audio.pause();
       setIsPlaying(false);
+      fadeAudioTo(0, 180, () => {
+        audio.pause();
+        audio.volume = TARGET_VOLUME;
+      });
     } else {
       userPausedRef.current = false;
       autoplayResolvedRef.current = true;
       setHasLoadError(false);
+      audio.volume = 0.02;
       const playPromise = audio.play();
       if (playPromise && typeof playPromise.then === 'function') {
         playPromise
           .then(() => {
             setIsPlaying(true);
+            fadeAudioTo(TARGET_VOLUME, 320);
           })
           .catch(() => {
             setIsPlaying(false);
@@ -198,6 +275,7 @@ export function FloatingMusicPlayer({
           });
       } else {
         setIsPlaying(true);
+        fadeAudioTo(TARGET_VOLUME, 320);
       }
     }
   };
@@ -231,27 +309,6 @@ export function FloatingMusicPlayer({
     setIsPlaying(true);
   };
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const nextTime = Number(e.target.value);
-    if (audioRef.current && Number.isFinite(nextTime)) {
-      audioRef.current.currentTime = nextTime;
-      setCurrentTime(nextTime);
-    }
-  };
-
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const nextVol = Number(e.target.value);
-    setVolume(nextVol);
-    if (nextVol > 0 && isMuted) {
-      setIsMuted(false);
-    }
-  };
-
-  const toggleMute = () => {
-    playTapSound(soundEnabled);
-    setIsMuted((prev) => !prev);
-  };
-
   const displayDuration = duration > 0 ? duration : currentTrack?.durationSec || 0;
   const progressPercent =
     displayDuration > 0 ? Math.min(100, (currentTime / displayDuration) * 100) : 0;
@@ -269,6 +326,9 @@ export function FloatingMusicPlayer({
             autoplayResolvedRef.current = true;
             setIsPlaying(true);
             setHasLoadError(false);
+            if (audioRef.current && audioRef.current.volume < TARGET_VOLUME - 0.05) {
+              fadeAudioTo(TARGET_VOLUME, 400);
+            }
           }}
           onLoadedMetadata={() => {
             if (audioRef.current && Number.isFinite(audioRef.current.duration)) {
@@ -295,7 +355,7 @@ export function FloatingMusicPlayer({
         />
       )}
 
-      {/* Compact Top Header Button (matches Color Theme button style) */}
+      {/* Compact Top Header Button (matches Color Theme button style with silky equalizer dot) */}
       <button
         type="button"
         onClick={() => {
@@ -305,196 +365,175 @@ export function FloatingMusicPlayer({
         aria-label={t.musicTitle}
         title={t.musicTitle}
         aria-expanded={isOpen}
-        className={`h-8 sm:h-9 px-2 sm:px-2.5 rounded-xl border flex items-center gap-1.5 transition-all active:scale-95 ${
+        className={`h-8 sm:h-9 px-2 sm:px-2.5 rounded-xl border flex items-center gap-1.5 transition-all duration-300 ease-out active:scale-95 ${
           isOpen
             ? `${themeConfig.accentBg} shadow-md`
             : isLight
               ? 'bg-white hover:bg-slate-100 text-slate-800 border-slate-200 shadow-sm'
-              : 'bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200 border-neutral-800 shadow-sm'
+              : 'bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200 border-neutral-800 shadow-sm hover:border-amber-400/35'
         }`}
       >
-        <Music2 className={`w-3.5 h-3.5 ${isPlaying && !isOpen ? 'text-amber-400 animate-pulse' : ''}`} />
-        <span
-          className={`w-2.5 h-2.5 rounded-full ring-1 ring-white/60 shadow-sm transition-colors ${
-            isPlaying ? 'bg-amber-400 animate-pulse' : 'bg-slate-400/70'
+        <Music2
+          className={`w-3.5 h-3.5 transition-colors duration-300 ${
+            isPlaying && !isOpen ? 'text-amber-400' : ''
           }`}
         />
+        <EqualizerBars active={isPlaying} compact />
       </button>
 
-      {/* Dropdown Glassmorphism Music Player Panel */}
-      {isOpen && (
-        <div
-          role="dialog"
-          aria-label={t.musicTitle}
-          className="fixed right-3 top-14 sm:absolute sm:right-0 sm:top-full sm:mt-2 w-[calc(100vw-24px)] max-w-[320px] sm:w-[320px] rounded-2xl bg-[#071128]/95 backdrop-blur-2xl border border-amber-400/30 shadow-[0_18px_48px_rgba(3,9,24,0.85)] text-white overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150"
-        >
-          {!hasTracks ? (
-            <div className="p-4 flex items-center gap-3 text-slate-300">
-              <div className="w-9 h-9 rounded-xl bg-amber-400/15 border border-amber-400/30 flex items-center justify-center text-amber-300 shrink-0">
-                <Music2 className="w-4 h-4" />
+      {/* Smooth Animated Luxury Glassmorphism Player Popover */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            role="dialog"
+            aria-label={t.musicTitle}
+            initial={{ opacity: 0, y: -8, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.96 }}
+            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+            className="fixed right-3 top-14 sm:absolute sm:right-0 sm:top-full sm:mt-2.5 w-[calc(100vw-24px)] max-w-[320px] sm:w-[320px] rounded-2xl bg-gradient-to-b from-[#091634]/95 via-[#071128]/95 to-[#050c1e]/98 backdrop-blur-2xl border border-amber-400/30 shadow-[0_22px_60px_rgba(2,6,18,0.88),inset_0_1px_0_rgba(255,255,255,0.08)] text-white overflow-hidden z-50 origin-top-right"
+          >
+            {/* Top Subtle Golden Rim Glow */}
+            <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-amber-400/70 to-transparent" />
+
+            {!hasTracks ? (
+              <div className="p-4 flex items-center gap-3 text-slate-300">
+                <div className="w-9 h-9 rounded-xl bg-amber-400/15 border border-amber-400/30 flex items-center justify-center text-amber-300 shrink-0">
+                  <Music2 className="w-4 h-4" />
+                </div>
+                <p className="text-xs font-medium">{t.musicNoTracks}</p>
               </div>
-              <p className="text-xs font-medium">{t.musicNoTracks}</p>
-            </div>
-          ) : (
-            <div>
-              {/* Top Golden Progress Strip */}
-              <div className="h-[2px] w-full bg-white/10">
-                <div
-                  className="h-full bg-gradient-to-r from-amber-500 to-amber-300 transition-[width] duration-200"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-
-              <div className="p-3.5 space-y-3">
-                {/* Active Track Info & Transport Controls */}
-                <div className="flex items-center justify-between gap-2.5">
-                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <div
-                      className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
-                        isPlaying
-                          ? 'bg-amber-400/20 border-amber-400/50 text-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.25)]'
-                          : 'bg-white/8 border-white/15 text-amber-300/90'
-                      }`}
-                    >
-                      <Music2 className={`w-4 h-4 ${isPlaying ? 'animate-pulse' : ''}`} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold text-white truncate">
-                        {currentTrack
-                          ? lang === 'bn'
-                            ? currentTrack.titleBn
-                            : currentTrack.title
-                          : t.musicTitle}
-                      </p>
-                      <p className="text-[10px] text-slate-300/80 truncate">
-                        {hasLoadError ? t.musicNoTracks : currentTrack?.artist ?? ''}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Prev / Play-Pause / Next */}
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      type="button"
-                      onClick={handlePrev}
-                      aria-label={t.musicPrev}
-                      title={t.musicPrev}
-                      className="w-7 h-7 rounded-lg hover:bg-white/10 text-slate-200 hover:text-amber-300 flex items-center justify-center transition-colors"
-                    >
-                      <SkipBack className="w-3.5 h-3.5" />
-                    </button>
-
-                    <button
-                      ref={playButtonRef}
-                      type="button"
-                      onClick={handleTogglePlay}
-                      aria-label={isPlaying ? t.musicPause : t.musicPlay}
-                      title={isPlaying ? t.musicPause : t.musicPlay}
-                      className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-[#060d1f] flex items-center justify-center shadow-[0_2px_12px_rgba(251,191,36,0.35)] transition-transform active:scale-95"
-                    >
-                      {isPlaying ? (
-                        <Pause className="w-3.5 h-3.5 fill-current" />
-                      ) : (
-                        <Play className="w-3.5 h-3.5 fill-current translate-x-[0.5px]" />
-                      )}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleNext}
-                      aria-label={t.musicNext}
-                      title={t.musicNext}
-                      className="w-7 h-7 rounded-lg hover:bg-white/10 text-slate-200 hover:text-amber-300 flex items-center justify-center transition-colors"
-                    >
-                      <SkipForward className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Seek Bar */}
-                <div className="space-y-1">
-                  <input
-                    type="range"
-                    min={0}
-                    max={displayDuration || 100}
-                    step={0.5}
-                    value={Math.min(currentTime, displayDuration || 100)}
-                    onChange={handleSeek}
-                    aria-label="Seek track"
-                    className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-white/15 accent-amber-400"
+            ) : (
+              <div>
+                {/* Smooth Glowing Progress Line */}
+                <div className="h-[2.5px] w-full bg-white/8 overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-amber-500 via-amber-300 to-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.7)] transition-[width] duration-300 ease-linear"
+                    style={{ width: `${progressPercent}%` }}
                   />
-                  <div className="flex items-center justify-between text-[10px] font-mono text-slate-300/80">
-                    <span>{formatTime(currentTime)}</span>
-                    <span>{formatTime(displayDuration)}</span>
-                  </div>
                 </div>
 
-                {/* Volume Control */}
-                <div className="flex items-center gap-2.5">
-                  <button
-                    type="button"
-                    onClick={toggleMute}
-                    aria-label={isMuted ? t.musicUnmute : t.musicMute}
-                    title={isMuted ? t.musicUnmute : t.musicMute}
-                    className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/15 text-amber-300 flex items-center justify-center transition-colors shrink-0"
-                  >
-                    {isMuted || volume === 0 ? (
-                      <VolumeX className="w-3.5 h-3.5" />
-                    ) : (
-                      <Volume2 className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.02}
-                    value={isMuted ? 0 : volume}
-                    onChange={handleVolumeChange}
-                    aria-label="Volume"
-                    className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer bg-white/15 accent-amber-400"
-                  />
-                  <span className="text-[10px] font-mono text-slate-300/80 w-8 text-right">
-                    {Math.round((isMuted ? 0 : volume) * 100)}%
-                  </span>
-                </div>
-
-                {/* Playlist */}
-                <div className="pt-1 border-t border-white/10 space-y-1 max-h-40 overflow-y-auto pr-0.5">
-                  <div className="text-[10px] uppercase tracking-wider text-amber-300/80 font-semibold px-1 pb-0.5">
-                    {t.musicPlaylist}
-                  </div>
-                  {tracks.map((track, idx) => {
-                    const isActive = idx === currentIndex;
-                    return (
-                      <button
-                        key={track.id}
-                        type="button"
-                        onClick={() => handleSelectTrack(idx)}
-                        className={`w-full px-2.5 py-1.5 rounded-xl flex items-center justify-between gap-2 text-left transition-colors ${
-                          isActive
-                            ? 'bg-amber-400/15 border border-amber-400/35 text-amber-200'
-                            : 'hover:bg-white/8 text-slate-200 border border-transparent'
+                <div className="p-4 space-y-3.5">
+                  {/* Active Track Card & Transport Controls */}
+                  <div className="flex items-center justify-between gap-2.5">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div
+                        className={`relative w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border transition-all duration-300 ${
+                          isPlaying
+                            ? 'bg-gradient-to-br from-amber-400/20 to-amber-500/10 border-amber-400/50 shadow-[0_0_18px_rgba(251,191,36,0.22)]'
+                            : 'bg-white/6 border-white/12'
                         }`}
                       >
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium truncate">
-                            {lang === 'bn' ? track.titleBn : track.title}
-                          </p>
-                          <p className="text-[10px] text-slate-400 truncate">{track.artist}</p>
-                        </div>
-                        <span className="text-[10px] font-mono text-slate-400 shrink-0">
-                          {formatTime(track.durationSec)}
-                        </span>
+                        <EqualizerBars active={isPlaying} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-display font-semibold text-white tracking-wide truncate">
+                          {currentTrack
+                            ? lang === 'bn'
+                              ? currentTrack.titleBn
+                              : currentTrack.title
+                            : t.musicTitle}
+                        </p>
+                        <p className="text-[11px] font-mono tabular-nums text-amber-200/75 truncate mt-0.5">
+                          {hasLoadError
+                            ? t.musicNoTracks
+                            : `${formatTime(currentTime)} / ${formatTime(displayDuration)}`}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Prev / Play-Pause / Next */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={handlePrev}
+                        aria-label={t.musicPrev}
+                        title={t.musicPrev}
+                        className="w-7 h-7 rounded-lg hover:bg-white/10 text-slate-300 hover:text-amber-300 flex items-center justify-center transition-all duration-200 active:scale-90"
+                      >
+                        <SkipBack className="w-3.5 h-3.5" />
                       </button>
-                    );
-                  })}
+
+                      <button
+                        ref={playButtonRef}
+                        type="button"
+                        onClick={handleTogglePlay}
+                        aria-label={isPlaying ? t.musicPause : t.musicPlay}
+                        title={isPlaying ? t.musicPause : t.musicPlay}
+                        className={`w-9 h-9 rounded-full bg-gradient-to-br from-amber-300 via-amber-400 to-amber-500 hover:from-amber-200 hover:to-amber-400 text-[#060d1f] flex items-center justify-center transition-all duration-200 active:scale-92 ${
+                          isPlaying
+                            ? 'shadow-[0_0_20px_rgba(251,191,36,0.45)] ring-2 ring-amber-300/35'
+                            : 'shadow-[0_4px_14px_rgba(251,191,36,0.3)]'
+                        }`}
+                      >
+                        {isPlaying ? (
+                          <Pause className="w-4 h-4 fill-current" />
+                        ) : (
+                          <Play className="w-4 h-4 fill-current translate-x-[0.5px]" />
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleNext}
+                        aria-label={t.musicNext}
+                        title={t.musicNext}
+                        className="w-7 h-7 rounded-lg hover:bg-white/10 text-slate-300 hover:text-amber-300 flex items-center justify-center transition-all duration-200 active:scale-90"
+                      >
+                        <SkipForward className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Sleek Playlist */}
+                  <div className="pt-2.5 border-t border-white/10 space-y-1.5 max-h-44 overflow-y-auto pr-0.5">
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-amber-300/80 font-semibold px-1.5 pb-0.5">
+                      {t.musicPlaylist}
+                    </div>
+                    {tracks.map((track, idx) => {
+                      const isActive = idx === currentIndex;
+                      return (
+                        <button
+                          key={track.id}
+                          type="button"
+                          onClick={() => handleSelectTrack(idx)}
+                          className={`w-full px-3 py-2 rounded-xl flex items-center justify-between gap-2.5 text-left transition-all duration-200 active:scale-[0.99] ${
+                            isActive
+                              ? 'bg-gradient-to-r from-amber-400/20 to-amber-500/10 border border-amber-400/40 text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]'
+                              : 'hover:bg-white/8 text-slate-200 border border-transparent hover:border-white/10'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <span
+                              className={`w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-mono shrink-0 transition-colors ${
+                                isActive
+                                  ? 'bg-amber-400/25 text-amber-300'
+                                  : 'bg-white/6 text-slate-400'
+                              }`}
+                            >
+                              {isActive && isPlaying ? (
+                                <EqualizerBars active compact />
+                              ) : (
+                                idx + 1
+                              )}
+                            </span>
+                            <p className="text-xs font-medium truncate">
+                              {lang === 'bn' ? track.titleBn : track.title}
+                            </p>
+                          </div>
+                          <span className="text-[10px] font-mono tabular-nums text-slate-400 shrink-0">
+                            {formatTime(track.durationSec)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
