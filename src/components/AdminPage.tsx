@@ -204,9 +204,28 @@ export function AdminPage({
     setIsSigningIn(true);
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : 'Sign in cancelled.';
-      setAuthError(errMsg);
+    } catch (error: unknown) {
+      const code =
+        typeof error === 'object' && error !== null && 'code' in error
+          ? String((error as { code?: unknown }).code)
+          : '';
+      if (code === 'auth/unauthorized-domain') {
+        const host = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
+        setAuthError(
+          lang === 'bn'
+            ? `এই ডোমেইন (${host}) Firebase Console → Authentication → Settings → Authorized domains-এ যোগ করা নেই।`
+            : `Domain (${host}) is not listed in Firebase Console → Authentication → Settings → Authorized domains.`
+        );
+      } else if (code === 'auth/popup-blocked') {
+        setAuthError(
+          lang === 'bn'
+            ? 'ব্রাউজারে পপআপ ব্লক করা আছে। অনুগ্রহ করে পপআপ Allow করে আবার চেষ্টা করুন।'
+            : 'Browser blocked the sign-in popup. Please allow popups and try again.'
+        );
+      } else {
+        const errMsg = error instanceof Error ? error.message : 'Sign in cancelled.';
+        setAuthError(errMsg);
+      }
     } finally {
       setIsSigningIn(false);
     }
