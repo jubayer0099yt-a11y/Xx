@@ -60,7 +60,6 @@ interface FloatingMote {
 // Shoreline boundaries matching mosque_pond_sunset_clean_1795742934385.jpg
 function getPondBounds(ny: number): { minX: number; maxX: number } {
   const t = Math.max(0, Math.min(1, (ny - 0.57) / 0.41));
-  // Narrower near the mosque bank, wider in the foreground
   const minX = 0.24 - t * 0.08 + Math.sin(t * Math.PI) * 0.03;
   const maxX = 0.72 + t * 0.21 - Math.sin(t * Math.PI * 0.85) * 0.04;
   return { minX, maxX };
@@ -124,12 +123,12 @@ function LivingNatureCanvas({ isOpen }: { isOpen: boolean }) {
     });
 
     const birds: Bird[] = [
-      { x: 0.08, y: 0.14, dir: 1, speed: 0.024, scale: 1.0, flapPhase: 0.2, flapSpeed: 7.2, glideTimer: 1.8 },
-      { x: 0.14, y: 0.17, dir: 1, speed: 0.023, scale: 0.84, flapPhase: 1.5, flapSpeed: 7.5, glideTimer: 0.9 },
-      { x: 0.03, y: 0.19, dir: 1, speed: 0.022, scale: 0.74, flapPhase: 2.8, flapSpeed: 7.8, glideTimer: 2.4 },
-      { x: 0.86, y: 0.11, dir: -1, speed: 0.019, scale: 0.68, flapPhase: 0.9, flapSpeed: 8.1, glideTimer: 1.2 },
-      { x: 0.93, y: 0.14, dir: -1, speed: 0.018, scale: 0.58, flapPhase: 2.1, flapSpeed: 8.4, glideTimer: 2.0 },
-      { x: 0.42, y: 0.09, dir: 1, speed: 0.015, scale: 0.52, flapPhase: 3.4, flapSpeed: 8.8, glideTimer: 1.5 },
+      { x: 0.08, y: 0.14, dir: 1, speed: 0.022, scale: 0.76, flapPhase: 0.2, flapSpeed: 7.4, glideTimer: 1.8 },
+      { x: 0.13, y: 0.17, dir: 1, speed: 0.021, scale: 0.64, flapPhase: 1.5, flapSpeed: 7.7, glideTimer: 0.9 },
+      { x: 0.04, y: 0.19, dir: 1, speed: 0.02, scale: 0.56, flapPhase: 2.8, flapSpeed: 8.0, glideTimer: 2.4 },
+      { x: 0.86, y: 0.11, dir: -1, speed: 0.018, scale: 0.54, flapPhase: 0.9, flapSpeed: 8.2, glideTimer: 1.2 },
+      { x: 0.92, y: 0.135, dir: -1, speed: 0.017, scale: 0.46, flapPhase: 2.1, flapSpeed: 8.5, glideTimer: 2.0 },
+      { x: 0.42, y: 0.09, dir: 1, speed: 0.014, scale: 0.42, flapPhase: 3.4, flapSpeed: 8.9, glideTimer: 1.5 },
     ];
 
     const ripples: WaterRipple[] = [
@@ -306,20 +305,23 @@ function LivingNatureCanvas({ isOpen }: { isOpen: boolean }) {
 
       ctx.clearRect(0, 0, w, h);
 
-      // 1. Subtle Pond Wave Shimmer & Golden Reflection Glints
+      // 1. Subtle Pond Wave Shimmer & Realistic Mosque/Sky Reflection Ripples
       ctx.save();
-      for (let i = 0; i < 16; i++) {
-        const ny = 0.59 + (i / 16) * 0.36;
+      for (let i = 0; i < 24; i++) {
+        const ny = 0.58 + (i / 24) * 0.38;
         const bounds = getPondBounds(ny);
-        const cx = (bounds.minX + bounds.maxX) * 0.5 + Math.sin(timeSec * 0.6 + i * 1.7) * 0.12;
-        const streakW = (0.04 + Math.sin(timeSec * 1.1 + i) * 0.02) * w;
-        const shimmerAlpha = 0.04 + 0.05 * (0.5 + 0.5 * Math.sin(timeSec * 1.8 + i * 2.3));
+        const cx =
+          (bounds.minX + bounds.maxX) * 0.5 +
+          Math.sin(timeSec * 0.55 + i * 1.45) * 0.15 +
+          Math.cos(timeSec * 0.35 + i) * 0.04;
+        const streakW = (0.032 + Math.sin(timeSec * 1.2 + i) * 0.018) * w;
+        const shimmerAlpha = 0.03 + 0.048 * (0.5 + 0.5 * Math.sin(timeSec * 1.65 + i * 2.1));
         ctx.fillStyle =
           i % 3 === 0
-            ? `rgba(254, 240, 138, ${shimmerAlpha * 1.35})`
+            ? `rgba(254, 240, 138, ${shimmerAlpha * 1.3})`
             : `rgba(255, 255, 255, ${shimmerAlpha})`;
         ctx.beginPath();
-        ctx.ellipse(cx * w, ny * h, streakW, 1.1 * dpr, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx * w, ny * h, streakW, (0.85 + (ny - 0.58) * 1.1) * dpr, 0, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.restore();
@@ -520,15 +522,16 @@ function WarmGoldenLantern({ side, isOpen }: { side: 'left' | 'right'; isOpen: b
         className="relative -mt-2 flex flex-col items-center origin-top animate-vine-sway"
         style={{ animationDelay: isLeft ? '0s' : '1.8s' }}
       >
-        {/* Soft Radial Golden Ambient Light Spill */}
+        {/* Soft Radial Golden Ambient Light Spill with Subtle Flicker */}
         <div
-          className={`absolute top-4 left-1/2 -translate-x-1/2 rounded-full pointer-events-none transition-all duration-700 ${
+          className={`absolute top-4 left-1/2 -translate-x-1/2 rounded-full pointer-events-none transition-all duration-700 animate-lantern-flicker ${
             isOpen ? 'w-36 h-36 sm:w-48 sm:h-48 opacity-95' : 'w-32 h-32 sm:w-40 sm:h-40 opacity-85'
           }`}
           style={{
             background:
-              'radial-gradient(circle, rgba(251,191,36,0.52) 0%, rgba(245,158,11,0.2) 40%, rgba(30,58,138,0.08) 70%, transparent 100%)',
+              'radial-gradient(circle, rgba(251,191,36,0.48) 0%, rgba(245,158,11,0.18) 40%, rgba(30,58,138,0.06) 70%, transparent 100%)',
             filter: 'blur(8px)',
+            animationDelay: isLeft ? '0.2s' : '1.6s',
           }}
         />
 
@@ -684,49 +687,71 @@ function NaturalBotanicalSurround() {
           strokeWidth="2.8"
           strokeLinecap="round"
         />
-        <path d="M 48 68 Q 26 96, 36 126" fill="none" stroke="#1e3a1e" strokeWidth="2.4" strokeLinecap="round" />
-        <path d="M 572 68 Q 594 96, 584 126" fill="none" stroke="#1e3a1e" strokeWidth="2.4" strokeLinecap="round" />
 
-        {[
-          { x: 38, y: 78, r: -40, s: 1.05 },
-          { x: 64, y: 60, r: -18, s: 1.15 },
-          { x: 92, y: 48, r: 16, s: 1.1 },
-          { x: 124, y: 38, r: -24, s: 1.0 },
-          { x: 158, y: 31, r: 22, s: 1.05 },
-          { x: 196, y: 26, r: -16, s: 0.95 },
-          { x: 236, y: 23, r: 18, s: 0.95 },
-          { x: 278, y: 21, r: -20, s: 0.9 },
-          { x: 34, y: 102, r: -58, s: 0.95 },
-          { x: 42, y: 120, r: -24, s: 0.8 },
-          { x: 582, y: 78, r: 220, s: 1.05 },
-          { x: 556, y: 60, r: 198, s: 1.15 },
-          { x: 528, y: 48, r: 164, s: 1.1 },
-          { x: 496, y: 38, r: 204, s: 1.0 },
-          { x: 462, y: 31, r: 158, s: 1.05 },
-          { x: 424, y: 26, r: 196, s: 0.95 },
-          { x: 384, y: 23, r: 162, s: 0.95 },
-          { x: 342, y: 21, r: 200, s: 0.9 },
-          { x: 586, y: 102, r: 238, s: 0.95 },
-          { x: 578, y: 120, r: 204, s: 0.8 },
-        ].map((l, idx) => (
-          <g key={idx} transform={`translate(${l.x}, ${l.y}) rotate(${l.r}) scale(${l.s})`}>
-            <path
-              d="M 0 0 C 7 -9, 19 -8, 24 0 C 19 8, 7 9, 0 0 Z"
-              fill={idx % 2 === 0 ? 'url(#ivy-deep)' : 'url(#ivy-sun)'}
-            />
-            <line x1="2" y1="0" x2="19" y2="0" stroke="#bef264" strokeWidth="0.5" opacity="0.38" />
+        {/* Gently swaying left trailing vine tendril */}
+        <g className="animate-vine-sway-soft" style={{ transformOrigin: '48px 68px' }}>
+          <path d="M 48 68 Q 26 96, 36 126" fill="none" stroke="#1e3a1e" strokeWidth="2.4" strokeLinecap="round" />
+          <g transform="translate(34, 102) rotate(-58) scale(0.95)">
+            <path d="M 0 0 C 7 -9, 19 -8, 24 0 C 19 8, 7 9, 0 0 Z" fill="url(#ivy-deep)" />
           </g>
-        ))}
+          <g transform="translate(42, 120) rotate(-24) scale(0.8)">
+            <path d="M 0 0 C 7 -9, 19 -8, 24 0 C 19 8, 7 9, 0 0 Z" fill="url(#ivy-sun)" />
+          </g>
+          <RealisticFlower cx={40} cy={96} scale={0.82} tone="gold" />
+        </g>
 
-        <RealisticFlower cx={72} cy={58} scale={1.1} tone="rose" />
-        <RealisticFlower cx={132} cy={38} scale={0.95} tone="gold" />
-        <RealisticFlower cx={194} cy={30} scale={0.82} tone="ivory" />
-        <RealisticFlower cx={310} cy={22} scale={1.1} tone="gold" />
-        <RealisticFlower cx={426} cy={30} scale={0.82} tone="ivory" />
-        <RealisticFlower cx={488} cy={38} scale={0.95} tone="gold" />
-        <RealisticFlower cx={548} cy={58} scale={1.1} tone="rose" />
-        <RealisticFlower cx={40} cy={96} scale={0.82} tone="gold" />
-        <RealisticFlower cx={580} cy={96} scale={0.82} tone="gold" />
+        {/* Gently swaying right trailing vine tendril */}
+        <g
+          className="animate-vine-sway-soft"
+          style={{ transformOrigin: '572px 68px', animationDelay: '1.9s' }}
+        >
+          <path d="M 572 68 Q 594 96, 584 126" fill="none" stroke="#1e3a1e" strokeWidth="2.4" strokeLinecap="round" />
+          <g transform="translate(586, 102) rotate(238) scale(0.95)">
+            <path d="M 0 0 C 7 -9, 19 -8, 24 0 C 19 8, 7 9, 0 0 Z" fill="url(#ivy-deep)" />
+          </g>
+          <g transform="translate(578, 120) rotate(204) scale(0.8)">
+            <path d="M 0 0 C 7 -9, 19 -8, 24 0 C 19 8, 7 9, 0 0 Z" fill="url(#ivy-sun)" />
+          </g>
+          <RealisticFlower cx={580} cy={96} scale={0.82} tone="gold" />
+        </g>
+
+        {/* Top Leaf & Flower Garland with Subtle Breeze */}
+        <g className="animate-vine-sway-soft" style={{ transformOrigin: '310px 24px', animationDelay: '0.8s' }}>
+          {[
+            { x: 38, y: 78, r: -40, s: 1.05 },
+            { x: 64, y: 60, r: -18, s: 1.15 },
+            { x: 92, y: 48, r: 16, s: 1.1 },
+            { x: 124, y: 38, r: -24, s: 1.0 },
+            { x: 158, y: 31, r: 22, s: 1.05 },
+            { x: 196, y: 26, r: -16, s: 0.95 },
+            { x: 236, y: 23, r: 18, s: 0.95 },
+            { x: 278, y: 21, r: -20, s: 0.9 },
+            { x: 582, y: 78, r: 220, s: 1.05 },
+            { x: 556, y: 60, r: 198, s: 1.15 },
+            { x: 528, y: 48, r: 164, s: 1.1 },
+            { x: 496, y: 38, r: 204, s: 1.0 },
+            { x: 462, y: 31, r: 158, s: 1.05 },
+            { x: 424, y: 26, r: 196, s: 0.95 },
+            { x: 384, y: 23, r: 162, s: 0.95 },
+            { x: 342, y: 21, r: 200, s: 0.9 },
+          ].map((l, idx) => (
+            <g key={idx} transform={`translate(${l.x}, ${l.y}) rotate(${l.r}) scale(${l.s})`}>
+              <path
+                d="M 0 0 C 7 -9, 19 -8, 24 0 C 19 8, 7 9, 0 0 Z"
+                fill={idx % 2 === 0 ? 'url(#ivy-deep)' : 'url(#ivy-sun)'}
+              />
+              <line x1="2" y1="0" x2="19" y2="0" stroke="#bef264" strokeWidth="0.5" opacity="0.38" />
+            </g>
+          ))}
+
+          <RealisticFlower cx={72} cy={58} scale={1.1} tone="rose" />
+          <RealisticFlower cx={132} cy={38} scale={0.95} tone="gold" />
+          <RealisticFlower cx={194} cy={30} scale={0.82} tone="ivory" />
+          <RealisticFlower cx={310} cy={22} scale={1.1} tone="gold" />
+          <RealisticFlower cx={426} cy={30} scale={0.82} tone="ivory" />
+          <RealisticFlower cx={488} cy={38} scale={0.95} tone="gold" />
+          <RealisticFlower cx={548} cy={58} scale={1.1} tone="rose" />
+        </g>
       </svg>
 
       {/* Sill Left & Right Blooming Flower Clusters */}
@@ -978,15 +1003,6 @@ export function MagicWoodenWindow({ soundEnabled }: MagicWoodenWindowProps) {
 
   return (
     <section className="w-full mt-12 mb-10 px-5 sm:px-10 flex justify-center relative">
-      {/* Seamless Deep Navy & Golden Atmospheric Blend into Website Background */}
-      <div
-        className="pointer-events-none absolute inset-x-0 -top-10 -bottom-10 -z-20"
-        style={{
-          background:
-            'radial-gradient(ellipse at center, rgba(15, 29, 64, 0.75) 0%, rgba(9, 17, 38, 0.45) 48%, transparent 78%)',
-        }}
-      />
-
       <div
         role="button"
         tabIndex={0}
@@ -996,21 +1012,49 @@ export function MagicWoodenWindow({ soundEnabled }: MagicWoodenWindowProps) {
         onKeyDown={handleKeyDown}
         className="relative w-full max-w-[500px] cursor-pointer group focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70 rounded-xl select-none"
       >
-        {/* Theme-Matched Dark Navy + Warm Golden Rim Halo */}
+        {/* Subtle Warm Golden Rim Halo */}
         <div
-          className={`pointer-events-none absolute -inset-7 sm:-inset-12 rounded-full transition-opacity duration-1000 -z-10 ${
-            isOpen ? 'opacity-100' : 'opacity-75'
+          className={`pointer-events-none absolute -inset-6 sm:-inset-10 rounded-full transition-opacity duration-1000 -z-10 ${
+            isOpen ? 'opacity-90' : 'opacity-55'
           }`}
           style={{
             background: isOpen
-              ? 'radial-gradient(circle, rgba(251,191,36,0.26) 0%, rgba(30,58,138,0.28) 46%, transparent 74%)'
-              : 'radial-gradient(circle, rgba(245,158,11,0.16) 0%, rgba(23,37,84,0.34) 48%, transparent 75%)',
-            filter: 'blur(26px)',
+              ? 'radial-gradient(circle, rgba(251,191,36,0.22) 0%, rgba(245,158,11,0.08) 46%, transparent 74%)'
+              : 'radial-gradient(circle, rgba(245,158,11,0.14) 0%, transparent 72%)',
+            filter: 'blur(24px)',
           }}
         />
 
         {/* Climbing Botanical Vines & Realistic Flowers */}
         <NaturalBotanicalSurround />
+
+        {/* Subtle Glowing & Fading Fireflies around the Window Vines & Lanterns */}
+        <div className="pointer-events-none absolute -inset-6 sm:-inset-10 z-50" aria-hidden="true">
+          {[
+            { top: '8%', left: '12%', delay: '0s', duration: '5.8s' },
+            { top: '16%', right: '14%', delay: '1.4s', duration: '6.6s' },
+            { top: '34%', left: '2%', delay: '2.7s', duration: '7.1s' },
+            { top: '42%', right: '3%', delay: '0.8s', duration: '6.2s' },
+            { top: '64%', left: '5%', delay: '3.6s', duration: '5.9s' },
+            { top: '70%', right: '6%', delay: '2.1s', duration: '6.8s' },
+            { bottom: '10%', left: '18%', delay: '1.1s', duration: '6.4s' },
+            { bottom: '12%', right: '19%', delay: '4.0s', duration: '7.0s' },
+            { top: '4%', left: '48%', delay: '2.9s', duration: '6.1s' },
+          ].map((f, idx) => (
+            <span
+              key={idx}
+              style={{
+                top: f.top,
+                bottom: f.bottom,
+                left: f.left,
+                right: f.right,
+                animationDelay: f.delay,
+                animationDuration: f.duration,
+              }}
+              className="absolute w-2 h-2 rounded-full bg-amber-300 ring-1 ring-amber-400/50 shadow-[0_0_10px_3px_rgba(245,158,11,0.65)] animate-firefly"
+            />
+          ))}
+        </div>
 
         {/* Two Warm Golden Lanterns */}
         <WarmGoldenLantern side="left" isOpen={isOpen} />
