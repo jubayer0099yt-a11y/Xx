@@ -5,14 +5,18 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { BIO_LINKS, PROFILE_DATA } from './data/links';
+import { MUSIC_TRACKS } from './data/music';
 import { ThemePreset } from './types';
 import { THEME_CONFIGS } from './data/themes';
 import { Language } from './data/i18n';
 import { Header } from './components/Header';
 import { QuickSocialStrip } from './components/QuickSocialStrip';
 import { LinkCard } from './components/LinkCard';
+import { ContactFormSection } from './components/ContactFormSection';
 import { MagicWoodenWindow } from './components/MagicWoodenWindow';
 import { ShareModal } from './components/ShareModal';
+import { LoadingScreen } from './components/LoadingScreen';
+import { FloatingMusicPlayer } from './components/FloatingMusicPlayer';
 
 export default function App() {
   // Theme state with fallback to 'signature'
@@ -129,6 +133,9 @@ export default function App() {
         themeConfig.textColor
       }`}
     >
+      {/* Premium Loading Screen */}
+      <LoadingScreen avatarUrl={PROFILE_DATA.avatarUrl} />
+
       {/* Ambient background using the user's artwork with theme-reactive glow */}
       <div className="fixed inset-0 pointer-events-none -z-20 overflow-hidden">
         <img
@@ -160,7 +167,7 @@ export default function App() {
       />
 
       {/* Main Content Container */}
-      <main className="w-full max-w-2xl mx-auto px-4 pb-16 flex flex-col items-center">
+      <main className="w-full max-w-2xl mx-auto px-4 pb-24 flex flex-col items-center">
         {/* Profile Header with Color Switcher and Language Toggle */}
         <Header
           profile={PROFILE_DATA}
@@ -202,7 +209,21 @@ export default function App() {
 
         {/* Interactive 3D Wooden Window */}
         <MagicWoodenWindow soundEnabled={soundEnabled} />
+
+        {/* Compact Contact Me Button at the Very Bottom */}
+        <ContactFormSection
+          soundEnabled={soundEnabled}
+          themeConfig={themeConfig}
+          lang={lang}
+        />
       </main>
+
+      {/* Floating Glassmorphism Music Player */}
+      <FloatingMusicPlayer
+        tracks={MUSIC_TRACKS}
+        soundEnabled={soundEnabled}
+        lang={lang}
+      />
 
       {/* Share Modal */}
       <ShareModal

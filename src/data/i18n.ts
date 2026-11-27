@@ -73,6 +73,36 @@ export const TRANSLATIONS = {
 
     // Toast notifications
     toastThemeChanged: (name: string) => `Theme changed to: ${name}`,
+
+    // Floating Music Player
+    musicTitle: 'Music Player',
+    musicNoTracks: 'No music tracks available',
+    musicPlay: 'Play',
+    musicPause: 'Pause',
+    musicNext: 'Next track',
+    musicPrev: 'Previous track',
+    musicMute: 'Mute',
+    musicUnmute: 'Unmute',
+    musicPlaylist: 'Playlist',
+
+    // Contact Me Form
+    contactTitle: 'Contact Me',
+    contactSubtitle: 'Send a direct message for collaborations, edits, or inquiries.',
+    contactNameLabel: 'Your Name',
+    contactNamePlaceholder: 'Enter your name',
+    contactEmailLabel: 'Email Address',
+    contactEmailPlaceholder: 'you@example.com',
+    contactMessageLabel: 'Message',
+    contactMessagePlaceholder: 'Write your message here...',
+    contactSend: 'Send Message',
+    contactSending: 'Sending...',
+    contactSuccessTitle: 'Message Sent Successfully',
+    contactSuccessDesc: 'Thank you for reaching out. Your message has been received.',
+    contactSendAnother: 'Send another message',
+    contactErrName: 'Please enter at least 2 characters for your name.',
+    contactErrEmail: 'Please enter a valid email address.',
+    contactErrMessage: 'Message must be at least 10 characters.',
+    contactErrGeneric: 'Unable to send message right now. Please try again.',
   },
   bn: {
     appTitle: 'জুবায়ের',
@@ -146,5 +176,35 @@ export const TRANSLATIONS = {
 
     // Toast notifications
     toastThemeChanged: (name: string) => `কালার থিম পরিবর্তিত: ${name}`,
+
+    // Floating Music Player
+    musicTitle: 'মিউজিক প্লেয়ার',
+    musicNoTracks: 'কোনো মিউজিক ট্র্যাক পাওয়া যায়নি',
+    musicPlay: 'চালান',
+    musicPause: 'থামান',
+    musicNext: 'পরবর্তী গান',
+    musicPrev: 'পূর্ববর্তী গান',
+    musicMute: 'মিউট করুন',
+    musicUnmute: 'সাউন্ড চালু করুন',
+    musicPlaylist: 'প্লেলিস্ট',
+
+    // Contact Me Form
+    contactTitle: 'যোগাযোগ করুন',
+    contactSubtitle: 'কোলাবোরেশন, এডিট বা যেকোনো প্রয়োজনে সরাসরি বার্তা পাঠান।',
+    contactNameLabel: 'আপনার নাম',
+    contactNamePlaceholder: 'আপনার নাম লিখুন',
+    contactEmailLabel: 'ইমেইল ঠিকানা',
+    contactEmailPlaceholder: 'you@example.com',
+    contactMessageLabel: 'বার্তা',
+    contactMessagePlaceholder: 'এখানে আপনার বার্তা লিখুন...',
+    contactSend: 'বার্তা পাঠান',
+    contactSending: 'পাঠানো হচ্ছে...',
+    contactSuccessTitle: 'বার্তা সফলভাবে পাঠানো হয়েছে',
+    contactSuccessDesc: 'যোগাযোগ করার জন্য ধন্যবাদ। আপনার বার্তা গ্রহণ করা হয়েছে।',
+    contactSendAnother: 'আরেকটি বার্তা পাঠান',
+    contactErrName: 'অনুগ্রহ করে কমপক্ষে ২ অক্ষরের নাম লিখুন।',
+    contactErrEmail: 'অনুগ্রহ করে একটি সঠিক ইমেইল ঠিকানা লিখুন।',
+    contactErrMessage: 'বার্তা কমপক্ষে ১০ অক্ষরের হতে হবে।',
+    contactErrGeneric: 'এই মুহূর্তে বার্তা পাঠানো যাচ্ছে না। একটু পর আবার চেষ্টা করুন।',
   },
 };
