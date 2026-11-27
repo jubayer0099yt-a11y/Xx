@@ -17,19 +17,201 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#39;');
 }
 
+function timingSafeTextEqual(a: string, b: string): boolean {
+  const key = crypto.randomBytes(32);
+  const digestA = crypto.createHmac('sha256', key).update(a, 'utf8').digest();
+  const digestB = crypto.createHmac('sha256', key).update(b, 'utf8').digest();
+  return crypto.timingSafeEqual(digestA, digestB);
+}
+
+function hashPasswordScrypt(password: string): string {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const derived = crypto.scryptSync(password, salt, 64).toString('hex');
+  return `scrypt$${salt}$${derived}`;
+}
+
+function verifyPasswordScrypt(password: string, storedHash: string): boolean {
+  const parts = storedHash.split('$');
+  if (parts.length !== 3 || parts[0] !== 'scrypt') {
+    return false;
+  }
+  const [, salt, expectedHex] = parts;
+  if (!salt || !expectedHex || expectedHex.length % 2 !== 0) {
+    return false;
+  }
+  try {
+    const expectedBuf = Buffer.from(expectedHex, 'hex');
+    const derivedBuf = crypto.scryptSync(password, salt, expectedBuf.length);
+    return (
+      derivedBuf.length === expectedBuf.length &&
+      crypto.timingSafeEqual(derivedBuf, expectedBuf)
+    );
+  } catch {
+    return false;
+  }
+}
+
+const VALID_ID_REGEX = /^[a-zA-Z0-9_-]{1,128}$/;
+const VALID_USERNAME_REGEX = /^[a-zA-Z0-9._-]{3,64}$/;
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+
+interface StoredContactMessage {
+  id: string;
+  name: string;
+  email: string;
+  message: string;
+  status: 'unread' | 'read';
+  deliveredVia: 'email' | 'saved';
+  createdAt: string;
+  updatedAt: string | null;
+}
+
+interface StoredAdminCredentials {
+  username: string;
+  passwordHash: string;
+  createdAt: string;
+}
+
+interface AdminTokenPayload {
+  sub: string;
+  jti: string;
+  iat: number;
+  exp: number;
+}
+
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT || 3000;
   app.set('trust proxy', 1);
   app.use(express.json({ limit: '16kb' }));
 
-  // Data persistence for real-time visitors and contact messages
   const dataDir = path.resolve(process.cwd(), 'data');
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
   }
   const counterFile = path.join(dataDir, 'visitors.json');
   const contactFile = path.join(dataDir, 'contact_messages.json');
+  const adminAuthFile = path.join(dataDir, 'admin_credentials.json');
+
+  const sessionSecret =
+    process.env.ADMIN_SESSION_SECRET && process.env.ADMIN_SESSION_SECRET.trim().length >= 16
+      ? process.env.ADMIN_SESSION_SECRET.trim()
+      : crypto.randomBytes(32).toString('hex');
+
+  const revokedTokenJtis = new Set<string>();
+
+  // If ADMIN_PASSWORD (plaintext env secret) is supplied without ADMIN_PASSWORD_HASH,
+  // hash it once in memory using scrypt so comparisons always go through scrypt + timingSafeEqual.
+  const envPlainPassword = process.env.ADMIN_PASSWORD?.trim();
+  const envPasswordHashFromPlain = envPlainPassword
+    ? hashPasswordScrypt(envPlainPassword)
+    : null;
+
+  function getConfiguredAdmin(): {
+    configured: boolean;
+    source: 'env' | 'file' | 'none';
+    username: string | null;
+    passwordHash: string | null;
+  } {
+    const envUsername = process.env.ADMIN_USERNAME?.trim();
+    const envHash = process.env.ADMIN_PASSWORD_HASH?.trim() || envPasswordHashFromPlain;
+    if (envUsername && envHash) {
+      return {
+        configured: true,
+        source: 'env',
+        username: envUsername,
+        passwordHash: envHash,
+      };
+    }
+
+    try {
+      if (fs.existsSync(adminAuthFile)) {
+        const raw = fs.readFileSync(adminAuthFile, 'utf-8');
+        const parsed = JSON.parse(raw) as Partial<StoredAdminCredentials>;
+        if (
+          typeof parsed.username === 'string' &&
+          typeof parsed.passwordHash === 'string' &&
+          parsed.username.length > 0 &&
+          parsed.passwordHash.startsWith('scrypt$')
+        ) {
+          return {
+            configured: true,
+            source: 'file',
+            username: parsed.username,
+            passwordHash: parsed.passwordHash,
+          };
+        }
+      }
+    } catch {
+      // Ignore unreadable credentials file
+    }
+
+    return {
+      configured: false,
+      source: 'none',
+      username: null,
+      passwordHash: null,
+    };
+  }
+
+  function signAdminToken(username: string): string {
+    const now = Date.now();
+    const payload: AdminTokenPayload = {
+      sub: username,
+      jti: crypto.randomUUID(),
+      iat: now,
+      exp: now + SESSION_TTL_MS,
+    };
+    const payloadB64 = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+    const sig = crypto
+      .createHmac('sha256', sessionSecret)
+      .update(payloadB64)
+      .digest('base64url');
+    return `${payloadB64}.${sig}`;
+  }
+
+  function verifyAdminToken(token: string): AdminTokenPayload | null {
+    const dotIdx = token.indexOf('.');
+    if (dotIdx <= 0) return null;
+    const payloadB64 = token.slice(0, dotIdx);
+    const sigB64 = token.slice(dotIdx + 1);
+    if (!payloadB64 || !sigB64) return null;
+
+    const expectedSig = crypto
+      .createHmac('sha256', sessionSecret)
+      .update(payloadB64)
+      .digest('base64url');
+
+    const sigBuf = Buffer.from(sigB64, 'utf8');
+    const expectedBuf = Buffer.from(expectedSig, 'utf8');
+    if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+      return null;
+    }
+
+    try {
+      const payload = JSON.parse(
+        Buffer.from(payloadB64, 'base64url').toString('utf8')
+      ) as Partial<AdminTokenPayload>;
+      if (
+        typeof payload.sub !== 'string' ||
+        typeof payload.jti !== 'string' ||
+        typeof payload.iat !== 'number' ||
+        typeof payload.exp !== 'number'
+      ) {
+        return null;
+      }
+      if (Date.now() > payload.exp) return null;
+      if (revokedTokenJtis.has(payload.jti)) return null;
+
+      const admin = getConfiguredAdmin();
+      if (!admin.configured || !admin.username || !timingSafeTextEqual(payload.sub, admin.username)) {
+        return null;
+      }
+      return payload as AdminTokenPayload;
+    } catch {
+      return null;
+    }
+  }
 
   // Baseline real visitor count for Jubayer's profile
   const BASELINE_COUNT = 3480;
@@ -56,63 +238,96 @@ async function startServer() {
     } catch {}
   }
 
-  // Active online simulator based on time of day
   function getActiveOnline(): number {
     const hour = new Date().getHours();
     return Math.floor(4 + Math.sin(hour / 3) * 3 + (Date.now() % 3));
   }
 
-  // Per-IP sliding window rate limiter for /api/contact (max 5 requests per 10 min)
-  const contactRateMap = new Map<string, number[]>();
-  const RATE_WINDOW_MS = 10 * 60 * 1000;
-  const RATE_MAX_REQUESTS = 5;
-
-  function isRateLimited(ip: string): boolean {
-    const now = Date.now();
-    const history = (contactRateMap.get(ip) || []).filter((ts) => now - ts < RATE_WINDOW_MS);
-    if (history.length >= RATE_MAX_REQUESTS) {
-      contactRateMap.set(ip, history);
-      return true;
-    }
-    history.push(now);
-    contactRateMap.set(ip, history);
-    if (contactRateMap.size > 500) {
-      for (const [k, v] of contactRateMap.entries()) {
-        if (v.every((ts) => now - ts >= RATE_WINDOW_MS)) {
-          contactRateMap.delete(k);
+  // Sliding window rate limiter helper
+  function createRateLimiter(windowMs: number, maxRequests: number) {
+    const buckets = new Map<string, number[]>();
+    return (ip: string): boolean => {
+      const now = Date.now();
+      const history = (buckets.get(ip) || []).filter((ts) => now - ts < windowMs);
+      if (history.length >= maxRequests) {
+        buckets.set(ip, history);
+        return true;
+      }
+      history.push(now);
+      buckets.set(ip, history);
+      if (buckets.size > 500) {
+        for (const [k, v] of buckets.entries()) {
+          if (v.every((ts) => now - ts >= windowMs)) {
+            buckets.delete(k);
+          }
         }
       }
-    }
-    return false;
+      return false;
+    };
   }
 
-  interface StoredContactMessage {
-    id: string;
-    name: string;
-    email: string;
-    message: string;
-    deliveredVia: 'email' | 'saved';
-    createdAt: string;
-  }
+  const isContactRateLimited = createRateLimiter(10 * 60 * 1000, 5);
+  const isLoginRateLimited = createRateLimiter(10 * 60 * 1000, 10);
 
-  function saveContactMessage(entry: StoredContactMessage) {
-    let existing: StoredContactMessage[] = [];
+  function readContactMessages(): StoredContactMessage[] {
     try {
-      if (fs.existsSync(contactFile)) {
-        const raw = fs.readFileSync(contactFile, 'utf-8');
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) existing = parsed;
-      }
+      if (!fs.existsSync(contactFile)) return [];
+      const raw = fs.readFileSync(contactFile, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+        .map((item) => ({
+          id: typeof item.id === 'string' && VALID_ID_REGEX.test(item.id)
+            ? item.id
+            : crypto.randomUUID(),
+          name: typeof item.name === 'string' ? item.name : '',
+          email: typeof item.email === 'string' ? item.email : '',
+          message: typeof item.message === 'string' ? item.message : '',
+          status: (item.status === 'read' ? 'read' : 'unread') as 'read' | 'unread',
+          deliveredVia: (item.deliveredVia === 'email' ? 'email' : 'saved') as 'email' | 'saved',
+          createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date().toISOString(),
+          updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : null,
+        }));
     } catch {
-      existing = [];
+      return [];
     }
-    existing.push(entry);
-    // Keep most recent 500 messages bounded on disk
-    const trimmed = existing.slice(-500);
-    fs.writeFileSync(contactFile, JSON.stringify(trimmed, null, 2));
   }
 
-  // API Endpoints
+  function writeContactMessages(entries: StoredContactMessage[]) {
+    const bounded = entries.slice(-500);
+    const tempFile = `${contactFile}.${crypto.randomUUID()}.tmp`;
+    fs.writeFileSync(tempFile, JSON.stringify(bounded, null, 2));
+    fs.renameSync(tempFile, contactFile);
+  }
+
+  function extractBearerToken(req: express.Request): string | null {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || typeof authHeader !== 'string') return null;
+    if (!authHeader.startsWith('Bearer ')) return null;
+    const token = authHeader.slice(7).trim();
+    return token.length > 0 ? token : null;
+  }
+
+  function requireAdminAuth(
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction
+  ) {
+    res.setHeader('Cache-Control', 'no-store');
+    const token = extractBearerToken(req);
+    if (!token) {
+      return res.status(401).json({ ok: false, error: 'Authentication required.' });
+    }
+    const payload = verifyAdminToken(token);
+    if (!payload) {
+      return res.status(401).json({ ok: false, error: 'Invalid or expired admin session.' });
+    }
+    (req as express.Request & { adminSession?: AdminTokenPayload }).adminSession = payload;
+    next();
+  }
+
+  // Public API Endpoints
   app.get('/api/visitors', (req, res) => {
     res.json({
       count: getCount(),
@@ -131,7 +346,7 @@ async function startServer() {
 
   app.post('/api/contact', async (req, res) => {
     const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
-    if (isRateLimited(clientIp)) {
+    if (isContactRateLimited(clientIp)) {
       return res.status(429).json({
         ok: false,
         error: 'Too many messages sent. Please wait a few minutes before trying again.',
@@ -143,14 +358,15 @@ async function startServer() {
       return res.status(400).json({ ok: false, error: 'Invalid request payload.' });
     }
 
-    const { name, email, message, website, formLoadedAt } = body as Record<string, unknown>;
+    const { id: requestedId, name, email, message, website, formLoadedAt } = body as Record<
+      string,
+      unknown
+    >;
 
-    // Spam protection: honeypot check
     if (typeof website === 'string' && website.trim().length > 0) {
       return res.status(400).json({ ok: false, error: 'Spam check failed.' });
     }
 
-    // Spam protection: minimum human fill duration (1.2s)
     if (typeof formLoadedAt === 'number' && Number.isFinite(formLoadedAt)) {
       const elapsed = Date.now() - formLoadedAt;
       if (elapsed >= 0 && elapsed < 1200) {
@@ -182,10 +398,12 @@ async function startServer() {
       });
     }
 
-    const id = crypto.randomUUID();
+    const id =
+      typeof requestedId === 'string' && VALID_ID_REGEX.test(requestedId)
+        ? requestedId
+        : crypto.randomUUID();
     let deliveredVia: 'email' | 'saved' = 'saved';
 
-    // Optional real outbound email forwarding via Resend if configured in server environment
     const resendKey = process.env.RESEND_API_KEY;
     const recipientEmail = process.env.CONTACT_RECIPIENT_EMAIL || 'jubayer0099yt@gmail.com';
 
@@ -216,19 +434,23 @@ async function startServer() {
           deliveredVia = 'email';
         }
       } catch {
-        // Fallback to server persistence if outbound email network call fails
+        // Fallback to server persistence if outbound email fails
       }
     }
 
     try {
-      saveContactMessage({
+      const existing = readContactMessages();
+      existing.push({
         id,
         name: cleanName,
         email: cleanEmail,
         message: cleanMessage,
+        status: 'unread',
         deliveredVia,
         createdAt: new Date().toISOString(),
+        updatedAt: null,
       });
+      writeContactMessages(existing);
     } catch {
       return res.status(500).json({
         ok: false,
@@ -241,6 +463,226 @@ async function startServer() {
       id,
       deliveredVia,
     });
+  });
+
+  // Admin Authentication & Private Inbox Endpoints
+  app.get('/api/admin/status', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const admin = getConfiguredAdmin();
+    return res.json({
+      ok: true,
+      configured: admin.configured,
+    });
+  });
+
+  app.post('/api/admin/setup', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const admin = getConfiguredAdmin();
+    if (admin.configured) {
+      return res.status(403).json({
+        ok: false,
+        error: 'Admin credentials are already configured.',
+      });
+    }
+
+    const body = req.body;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return res.status(400).json({ ok: false, error: 'Invalid request payload.' });
+    }
+
+    const { username, password } = body as Record<string, unknown>;
+    if (typeof username !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({ ok: false, error: 'Username and password are required.' });
+    }
+
+    const cleanUsername = username.trim();
+    if (!VALID_USERNAME_REGEX.test(cleanUsername)) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Username must be 3-64 characters (letters, numbers, ., _, -).',
+      });
+    }
+
+    if (password.length < 4 || password.length > 128) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Password must be between 4 and 128 characters.',
+      });
+    }
+
+    const credentials: StoredAdminCredentials = {
+      username: cleanUsername,
+      passwordHash: hashPasswordScrypt(password),
+      createdAt: new Date().toISOString(),
+    };
+
+    try {
+      // Atomic exclusive create prevents race condition setup takeover
+      const fd = fs.openSync(adminAuthFile, 'wx', 0o600);
+      try {
+        fs.writeSync(fd, JSON.stringify(credentials, null, 2));
+      } finally {
+        fs.closeSync(fd);
+      }
+    } catch (err: unknown) {
+      const code =
+        typeof err === 'object' && err !== null && 'code' in err
+          ? String((err as { code?: unknown }).code)
+          : '';
+      if (code === 'EEXIST') {
+        return res.status(403).json({
+          ok: false,
+          error: 'Admin credentials are already configured.',
+        });
+      }
+      return res.status(500).json({
+        ok: false,
+        error: 'Could not save admin credentials.',
+      });
+    }
+
+    const token = signAdminToken(cleanUsername);
+    return res.status(201).json({
+      ok: true,
+      token,
+      username: cleanUsername,
+    });
+  });
+
+  app.post('/api/admin/login', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
+    if (isLoginRateLimited(clientIp)) {
+      return res.status(429).json({
+        ok: false,
+        error: 'Too many login attempts. Please wait a few minutes and try again.',
+      });
+    }
+
+    const admin = getConfiguredAdmin();
+    if (!admin.configured || !admin.username || !admin.passwordHash) {
+      return res.status(412).json({
+        ok: false,
+        error: 'Admin account is not configured yet.',
+      });
+    }
+
+    const body = req.body;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return res.status(400).json({ ok: false, error: 'Invalid login payload.' });
+    }
+
+    const { username, password } = body as Record<string, unknown>;
+    if (typeof username !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({ ok: false, error: 'Username and password are required.' });
+    }
+
+    const cleanUsername = username.trim();
+    if (!cleanUsername || !password) {
+      return res.status(400).json({ ok: false, error: 'Username and password are required.' });
+    }
+
+    const usernameValid = timingSafeTextEqual(cleanUsername, admin.username);
+    const passwordValid = verifyPasswordScrypt(password, admin.passwordHash);
+
+    if (!usernameValid || !passwordValid) {
+      return res.status(401).json({
+        ok: false,
+        error: 'Invalid username or password.',
+      });
+    }
+
+    const token = signAdminToken(admin.username);
+    return res.json({
+      ok: true,
+      token,
+      username: admin.username,
+    });
+  });
+
+  app.post('/api/admin/logout', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const token = extractBearerToken(req);
+    if (token) {
+      const payload = verifyAdminToken(token);
+      if (payload) {
+        revokedTokenJtis.add(payload.jti);
+        if (revokedTokenJtis.size > 1000) {
+          revokedTokenJtis.clear();
+        }
+      }
+    }
+    return res.json({ ok: true });
+  });
+
+  app.get('/api/admin/session', requireAdminAuth, (req, res) => {
+    const session = (req as express.Request & { adminSession?: AdminTokenPayload }).adminSession;
+    return res.json({
+      ok: true,
+      username: session?.sub || '',
+    });
+  });
+
+  app.get('/api/admin/messages', requireAdminAuth, (req, res) => {
+    const messages = readContactMessages().sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    return res.json({
+      ok: true,
+      messages,
+    });
+  });
+
+  app.patch('/api/admin/messages/:id', requireAdminAuth, (req, res) => {
+    const messageId = req.params.id;
+    if (!VALID_ID_REGEX.test(messageId)) {
+      return res.status(400).json({ ok: false, error: 'Invalid message ID.' });
+    }
+
+    const body = req.body;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return res.status(400).json({ ok: false, error: 'Invalid request payload.' });
+    }
+
+    const { status } = body as Record<string, unknown>;
+    if (status !== 'read' && status !== 'unread') {
+      return res.status(400).json({ ok: false, error: 'Status must be read or unread.' });
+    }
+
+    const existing = readContactMessages();
+    const idx = existing.findIndex((m) => m.id === messageId);
+    if (idx === -1) {
+      return res.status(404).json({ ok: false, error: 'Message not found.' });
+    }
+
+    const updated: StoredContactMessage = {
+      ...existing[idx],
+      status,
+      updatedAt: new Date().toISOString(),
+    };
+    existing[idx] = updated;
+    writeContactMessages(existing);
+
+    return res.json({
+      ok: true,
+      message: updated,
+    });
+  });
+
+  app.delete('/api/admin/messages/:id', requireAdminAuth, (req, res) => {
+    const messageId = req.params.id;
+    if (!VALID_ID_REGEX.test(messageId)) {
+      return res.status(400).json({ ok: false, error: 'Invalid message ID.' });
+    }
+
+    const existing = readContactMessages();
+    const filtered = existing.filter((m) => m.id !== messageId);
+    if (filtered.length === existing.length) {
+      return res.status(404).json({ ok: false, error: 'Message not found.' });
+    }
+
+    writeContactMessages(filtered);
+    return res.json({ ok: true });
   });
 
   // Vite middleware for dev or static for production

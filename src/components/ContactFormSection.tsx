@@ -175,13 +175,51 @@ export function ContactFormSection({
     const path = `messages/${messageId}`;
 
     try {
-      await setDoc(doc(db, 'messages', messageId), {
-        name: cleanName,
-        email: cleanEmail,
-        message: cleanMsg,
-        status: 'unread',
-        createdAt: serverTimestamp(),
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: messageId,
+          name: cleanName,
+          email: cleanEmail,
+          message: cleanMsg,
+          website: honeypot,
+          formLoadedAt: formLoadedAtRef.current,
+        }),
       });
+
+      const data = await response.json().catch(() => ({} as { ok?: boolean; error?: string }));
+      if (!response.ok || !data?.ok) {
+        if (response.status === 429) {
+          setErrors({ general: t.contactErrRateLimit });
+        } else {
+          setErrors({
+            general: typeof data?.error === 'string' && data.error.length > 0
+              ? data.error
+              : t.contactErrGeneric,
+          });
+        }
+        return;
+      }
+
+      // Mirror validated message create into Firestore safely
+      try {
+        await setDoc(doc(db, 'messages', messageId), {
+          name: cleanName,
+          email: cleanEmail,
+          message: cleanMsg,
+          status: 'unread',
+          createdAt: serverTimestamp(),
+        });
+      } catch (firestoreErr) {
+        try {
+          handleFirestoreError(firestoreErr, OperationType.CREATE, path);
+        } catch {
+          // Non-fatal: server inbox already captured the message
+        }
+      }
 
       recordClientSendTimestamp();
       playCopySound(soundEnabled);
@@ -191,12 +229,7 @@ export function ContactFormSection({
       setMessage('');
       setHoneypot('');
       formLoadedAtRef.current = Date.now();
-    } catch (error) {
-      try {
-        handleFirestoreError(error, OperationType.CREATE, path);
-      } catch {
-        // Show clean error banner to visitor while structured JSON is logged
-      }
+    } catch {
       setErrors({ general: t.contactErrGeneric });
     } finally {
       setIsSubmitting(false);

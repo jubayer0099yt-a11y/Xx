@@ -34,56 +34,15 @@
           "type": "string",
           "format": "date-time",
           "description": "Server-assigned creation timestamp"
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Server-assigned timestamp when read/unread status is updated"
         }
       },
       "required": ["name", "email", "message", "status", "createdAt"]
-    },
-    "AdminProfile": {
-      "title": "Admin Profile",
-      "description": "Verified administrator UID registry record.",
-      "type": "object",
-      "properties": {
-        "uid": {
-          "type": "string",
-          "description": "Firebase Auth UID of the administrator",
-          "minLength": 1,
-          "maxLength": 128,
-          "pattern": "^[a-zA-Z0-9_\\-]+$"
-        },
-        "email": {
-          "type": "string",
-          "format": "email",
-          "description": "Verified administrator email address",
-          "minLength": 5,
-          "maxLength": 120
-        },
-        "displayName": {
-          "type": "string",
-          "description": "Administrator display name",
-          "maxLength": 100
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Server-assigned timestamp when admin record was created"
-        }
-      },
-      "required": ["uid", "email", "createdAt"]
     }
   },
   "firestore": {
     "/messages/{messageId}": {
       "schema": { "$ref": "#/entities/ContactMessage" },
-      "description": "Stores visitor messages submitted from Contact Me. Publicly writable on create with strict validation; readable, updatable, and deletable exclusively by verified Admin."
-    },
-    "/admins/{adminUid}": {
-      "schema": { "$ref": "#/entities/AdminProfile" },
-      "description": "Stores verified Admin UID records for server-side identity lookup."
+      "description": "Stores visitor messages submitted from Contact Me. Publicly writable on create with strict validation; all client reads, updates, and deletes are denied."
     }
   }
 }

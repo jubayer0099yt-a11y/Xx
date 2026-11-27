@@ -1,22 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import {
-  User,
-  onAuthStateChanged,
-  signInWithPopup,
-  signOut,
-} from 'firebase/auth';
-import {
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-} from 'firebase/firestore';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   Calendar,
@@ -24,25 +6,20 @@ import {
   CheckCheck,
   Clock,
   Copy,
+  Eye,
+  EyeOff,
   Inbox,
+  KeyRound,
   Loader2,
   LogOut,
   Mail,
   MailOpen,
+  RefreshCw,
   Search,
   ShieldCheck,
-  ShieldX,
   Trash2,
+  User as UserIcon,
 } from 'lucide-react';
-import {
-  ADMIN_EMAIL,
-  auth,
-  ContactMessageRecord,
-  db,
-  googleProvider,
-  handleFirestoreError,
-  OperationType,
-} from '../firebase';
 import { Language, TRANSLATIONS } from '../data/i18n';
 import { ThemeConfig } from '../data/themes';
 import { PROFILE_DATA } from '../data/links';
@@ -56,16 +33,30 @@ interface AdminPageProps {
   onNavigateHome: () => void;
 }
 
+export interface AdminMessageRecord {
+  id: string;
+  name: string;
+  email: string;
+  message: string;
+  status: 'unread' | 'read';
+  deliveredVia?: 'email' | 'saved';
+  createdAt: string;
+  updatedAt: string | null;
+}
+
 type InboxFilter = 'all' | 'unread' | 'read';
 
 function formatDateAndTime(
-  ts: ContactMessageRecord['createdAt'],
+  isoDate: string | null | undefined,
   lang: Language
 ): { date: string; time: string } {
-  if (!ts || typeof ts.toDate !== 'function') {
+  if (!isoDate) {
     return { date: '—', time: '—' };
   }
-  const d = ts.toDate();
+  const d = new Date(isoDate);
+  if (Number.isNaN(d.getTime())) {
+    return { date: '—', time: '—' };
+  }
   const locale = lang === 'bn' ? 'bn-BD' : 'en-US';
   return {
     date: d.toLocaleDateString(locale, {
@@ -90,178 +81,262 @@ export function AdminPage({
   const t = TRANSLATIONS[lang];
   const isLight = Boolean(themeConfig.isLight);
 
-  const [authReady, setAuthReady] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
-  const [isAdminVerified, setIsAdminVerified] = useState(false);
-  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [statusLoading, setStatusLoading] = useState(true);
+  const [isConfigured, setIsConfigured] = useState(true);
+
+  // Session Bearer token kept exclusively in React memory (never localStorage/sessionStorage)
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [adminUsername, setAdminUsername] = useState<string | null>(null);
+
+  const [usernameInput, setUsernameInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  const [messages, setMessages] = useState<ContactMessageRecord[]>([]);
+  const [messages, setMessages] = useState<AdminMessageRecord[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [filter, setFilter] = useState<InboxFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [busyMessageId, setBusyMessageId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Listen to Firebase Auth state & verify Admin identity + UID record
+  // Check whether server admin credentials have been configured
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      setAuthError(null);
-
-      if (!currentUser) {
-        setIsAdminVerified(false);
-        setMessages([]);
-        setAuthReady(true);
-        return;
-      }
-
-      const emailMatches =
-        Boolean(currentUser.emailVerified) &&
-        currentUser.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-
-      if (!emailMatches) {
-        setIsAdminVerified(false);
-        setMessages([]);
-        setAuthReady(true);
-        return;
-      }
-
-      // Register or confirm real Admin UID in /admins/{uid}
-      const adminPath = `admins/${currentUser.uid}`;
+    let active = true;
+    async function loadStatus() {
       try {
-        const adminRef = doc(db, 'admins', currentUser.uid);
-        const snap = await getDoc(adminRef);
-        if (!snap.exists()) {
-          await setDoc(adminRef, {
-            uid: currentUser.uid,
-            email: currentUser.email,
-            displayName: (currentUser.displayName || 'JUBAYER').slice(0, 100),
-            createdAt: serverTimestamp(),
-          });
+        const res = await fetch('/api/admin/status', { cache: 'no-store' });
+        const data = await res.json().catch(() => ({}));
+        if (active && res.ok && typeof data?.configured === 'boolean') {
+          setIsConfigured(data.configured);
         }
-        setIsAdminVerified(true);
-      } catch (err) {
-        try {
-          handleFirestoreError(err, OperationType.WRITE, adminPath);
-        } catch (wrapped) {
-          setAuthError(
-            wrapped instanceof Error ? wrapped.message : 'Admin verification failed.'
-          );
-        }
-        setIsAdminVerified(false);
+      } catch {
+        // Default to standard login screen on temporary network glitch
       } finally {
-        setAuthReady(true);
+        if (active) setStatusLoading(false);
       }
-    });
-
-    return () => unsubscribe();
+    }
+    void loadStatus();
+    return () => {
+      active = false;
+    };
   }, []);
 
-  // Subscribe to real-time messages ONLY after auth & admin verification succeed
+  const clearSession = useCallback((errorMsg?: string) => {
+    setAuthToken(null);
+    setAdminUsername(null);
+    setMessages([]);
+    setConfirmDeleteId(null);
+    if (errorMsg) {
+      setAuthError(errorMsg);
+    }
+  }, []);
+
+  const fetchMessages = useCallback(
+    async (token: string) => {
+      setIsLoadingMessages(true);
+      setActionError(null);
+      try {
+        const res = await fetch('/api/admin/messages', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          cache: 'no-store',
+        });
+        if (res.status === 401) {
+          clearSession(
+            lang === 'bn'
+              ? 'সেশন শেষ হয়ে গেছে। অনুগ্রহ করে আবার লগইন করুন।'
+              : 'Session expired. Please sign in again.'
+          );
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.ok || !Array.isArray(data?.messages)) {
+          setActionError(
+            typeof data?.error === 'string' ? data.error : 'Failed to load messages.'
+          );
+          return;
+        }
+        setMessages(data.messages);
+      } catch {
+        setActionError(
+          lang === 'bn'
+            ? 'সার্ভার থেকে মেসেজ লোড করা যায়নি।'
+            : 'Unable to fetch messages from the server.'
+        );
+      } finally {
+        setIsLoadingMessages(false);
+      }
+    },
+    [clearSession, lang]
+  );
+
   useEffect(() => {
-    if (!authReady || !user || !isAdminVerified) {
+    if (!authToken) return;
+    void fetchMessages(authToken);
+  }, [authToken, fetchMessages]);
+
+  const handleAuthSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    playTapSound(soundEnabled);
+    setAuthError(null);
+
+    const cleanUsername = usernameInput.trim();
+    if (!cleanUsername || !passwordInput) {
+      setAuthError(t.adminErrRequired);
       return;
     }
 
-    setIsLoadingMessages(true);
-    const messagesQuery = query(
-      collection(db, 'messages'),
-      orderBy('createdAt', 'desc')
-    );
-
-    const unsubscribe = onSnapshot(
-      messagesQuery,
-      (snapshot) => {
-        const nextList: ContactMessageRecord[] = snapshot.docs.map((docSnap) => {
-          const data = docSnap.data();
-          return {
-            id: docSnap.id,
-            name: typeof data.name === 'string' ? data.name : '',
-            email: typeof data.email === 'string' ? data.email : '',
-            message: typeof data.message === 'string' ? data.message : '',
-            status: data.status === 'read' ? 'read' : 'unread',
-            createdAt: data.createdAt ?? null,
-            updatedAt: data.updatedAt ?? null,
-          };
-        });
-        setMessages(nextList);
-        setIsLoadingMessages(false);
-      },
-      (error) => {
-        setIsLoadingMessages(false);
-        handleFirestoreError(error, OperationType.LIST, 'messages');
-      }
-    );
-
-    return () => unsubscribe();
-  }, [authReady, user, isAdminVerified]);
-
-  const handleGoogleSignIn = async () => {
-    playTapSound(soundEnabled);
-    setAuthError(null);
-    setIsSigningIn(true);
+    const endpoint = isConfigured ? '/api/admin/login' : '/api/admin/setup';
+    setIsSubmittingAuth(true);
     try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (error: unknown) {
-      const code =
-        typeof error === 'object' && error !== null && 'code' in error
-          ? String((error as { code?: unknown }).code)
-          : '';
-      if (code === 'auth/unauthorized-domain') {
-        const host = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
-        setAuthError(
-          lang === 'bn'
-            ? `এই ডোমেইন (${host}) Firebase Console → Authentication → Settings → Authorized domains-এ যোগ করা নেই।`
-            : `Domain (${host}) is not listed in Firebase Console → Authentication → Settings → Authorized domains.`
-        );
-      } else if (code === 'auth/popup-blocked') {
-        setAuthError(
-          lang === 'bn'
-            ? 'ব্রাউজারে পপআপ ব্লক করা আছে। অনুগ্রহ করে পপআপ Allow করে আবার চেষ্টা করুন।'
-            : 'Browser blocked the sign-in popup. Please allow popups and try again.'
-        );
-      } else {
-        const errMsg = error instanceof Error ? error.message : 'Sign in cancelled.';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: cleanUsername,
+          password: passwordInput,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data?.ok || typeof data?.token !== 'string') {
+        if (res.status === 403 && !isConfigured) {
+          setIsConfigured(true);
+        }
+        if (res.status === 412) {
+          setIsConfigured(false);
+        }
+        const errMsg =
+          typeof data?.error === 'string' && data.error.length > 0
+            ? data.error
+            : lang === 'bn'
+              ? 'ভুল Username বা Password দেওয়া হয়েছে।'
+              : 'Invalid username or password.';
         setAuthError(errMsg);
+        return;
       }
+
+      setIsConfigured(true);
+      setAuthToken(data.token);
+      setAdminUsername(typeof data.username === 'string' ? data.username : cleanUsername);
+      setPasswordInput('');
+      playCopySound(soundEnabled);
+    } catch {
+      setAuthError(
+        lang === 'bn'
+          ? 'সার্ভারের সাথে সংযোগ স্থাপন করা যায়নি। আবার চেষ্টা করুন।'
+          : 'Unable to reach authentication server. Please try again.'
+      );
     } finally {
-      setIsSigningIn(false);
+      setIsSubmittingAuth(false);
     }
   };
 
   const handleSignOut = async () => {
     playTapSound(soundEnabled);
-    await signOut(auth);
+    const currentToken = authToken;
+    clearSession();
+    setPasswordInput('');
+    if (currentToken) {
+      try {
+        await fetch('/api/admin/logout', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${currentToken}`,
+          },
+        });
+      } catch {
+        // Ignore network errors on logout cleanup
+      }
+    }
   };
 
-  const handleToggleStatus = async (msg: ContactMessageRecord) => {
+  const handleToggleStatus = async (msg: AdminMessageRecord) => {
+    if (!authToken) return;
     playTapSound(soundEnabled);
     setBusyMessageId(msg.id);
+    setActionError(null);
     const nextStatus = msg.status === 'read' ? 'unread' : 'read';
-    const path = `messages/${msg.id}`;
+
     try {
-      await updateDoc(doc(db, 'messages', msg.id), {
-        status: nextStatus,
-        updatedAt: serverTimestamp(),
+      const res = await fetch(`/api/admin/messages/${encodeURIComponent(msg.id)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ status: nextStatus }),
       });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, path);
+
+      if (res.status === 401) {
+        clearSession();
+        return;
+      }
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.ok || !data?.message) {
+        setActionError(
+          typeof data?.error === 'string' ? data.error : 'Could not update message status.'
+        );
+        return;
+      }
+
+      setMessages((prev) =>
+        prev.map((item) => (item.id === msg.id ? data.message : item))
+      );
+    } catch {
+      setActionError(
+        lang === 'bn'
+          ? 'মেসেজের অবস্থা পরিবর্তন করা যায়নি।'
+          : 'Failed to update message status.'
+      );
     } finally {
       setBusyMessageId(null);
     }
   };
 
   const handleDeleteMessage = async (msgId: string) => {
+    if (!authToken) return;
     playTapSound(soundEnabled);
     setBusyMessageId(msgId);
-    const path = `messages/${msgId}`;
+    setActionError(null);
+
     try {
-      await deleteDoc(doc(db, 'messages', msgId));
+      const res = await fetch(`/api/admin/messages/${encodeURIComponent(msgId)}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
+      });
+
+      if (res.status === 401) {
+        clearSession();
+        return;
+      }
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.ok) {
+        setActionError(
+          typeof data?.error === 'string' ? data.error : 'Could not delete message.'
+        );
+        return;
+      }
+
+      setMessages((prev) => prev.filter((item) => item.id !== msgId));
       setConfirmDeleteId(null);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, path);
+    } catch {
+      setActionError(
+        lang === 'bn'
+          ? 'মেসেজ ডিলিট করা যায়নি।'
+          : 'Failed to delete message.'
+      );
     } finally {
       setBusyMessageId(null);
     }
@@ -303,6 +378,10 @@ export function AdminPage({
   const cardSurface = isLight
     ? 'bg-white/95 border-slate-200/90 text-slate-900 shadow-lg shadow-slate-900/5'
     : 'bg-[#071128]/90 border-amber-400/25 text-white shadow-[0_18px_48px_rgba(3,9,24,0.65)]';
+
+  const inputSurface = isLight
+    ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-amber-500 focus:ring-amber-500/20'
+    : 'bg-[#050d20]/85 border-white/15 text-white placeholder:text-slate-400 focus:border-amber-400 focus:ring-amber-400/20';
 
   return (
     <div className="min-h-screen w-full max-w-3xl mx-auto px-4 py-6 sm:py-8">
@@ -367,7 +446,7 @@ export function AdminPage({
             </button>
           </div>
 
-          {user && (
+          {authToken && (
             <button
               type="button"
               onClick={handleSignOut}
@@ -384,112 +463,146 @@ export function AdminPage({
         </div>
       </header>
 
-      {/* Loading Auth State */}
-      {!authReady ? (
+      {/* Initial Status Check */}
+      {statusLoading ? (
         <div
           className={`rounded-3xl border backdrop-blur-xl p-10 flex flex-col items-center justify-center gap-3 ${cardSurface}`}
         >
           <Loader2 className="w-7 h-7 animate-spin text-amber-400" />
           <p className="text-xs text-slate-400">{t.adminSubtitle}</p>
         </div>
-      ) : !user ? (
-        /* Unauthenticated Admin Login Screen */
+      ) : !authToken ? (
+        /* Username & Password Admin Login (or First-Run Setup when unconfigured) */
         <div
-          className={`rounded-3xl border backdrop-blur-xl p-6 sm:p-8 text-center space-y-5 relative overflow-hidden ${cardSurface}`}
+          className={`rounded-3xl border backdrop-blur-xl p-6 sm:p-8 max-w-md mx-auto space-y-5 relative overflow-hidden ${cardSurface}`}
         >
           <div className="absolute top-0 left-10 right-10 h-[1.5px] bg-gradient-to-r from-transparent via-amber-400/70 to-transparent" />
 
-          <div className="w-16 h-16 rounded-full mx-auto p-0.5 bg-gradient-to-tr from-amber-400 to-amber-600 shadow-lg">
-            <img
-              src={PROFILE_DATA.avatarUrl}
-              alt="JUBAYER"
-              className="w-full h-full rounded-full object-cover object-top bg-[#060d1f]"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/15 border border-amber-400/30 text-amber-300 text-[11px] font-semibold">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>JUBAYER PRIVATE ADMIN</span>
+          <div className="text-center space-y-3">
+            <div className="w-16 h-16 rounded-full mx-auto p-0.5 bg-gradient-to-tr from-amber-400 to-amber-600 shadow-lg">
+              <img
+                src={PROFILE_DATA.avatarUrl}
+                alt="JUBAYER"
+                className="w-full h-full rounded-full object-cover object-top bg-[#060d1f]"
+              />
             </div>
-            <h1 className="font-display text-xl sm:text-2xl font-bold pt-1">
-              {t.adminSignInTitle}
-            </h1>
-            <p
-              className={`text-xs sm:text-sm max-w-md mx-auto ${
-                isLight ? 'text-slate-600' : 'text-slate-300/85'
-              }`}
-            >
-              {t.adminSignInDesc}
-            </p>
+
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/15 border border-amber-400/30 text-amber-300 text-[11px] font-semibold">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>JUBAYER PRIVATE ADMIN</span>
+              </div>
+              <h1 className="font-display text-xl sm:text-2xl font-bold pt-1">
+                {isConfigured ? t.adminSignInTitle : t.adminSetupTitle}
+              </h1>
+              <p
+                className={`text-xs sm:text-sm ${
+                  isLight ? 'text-slate-600' : 'text-slate-300/85'
+                }`}
+              >
+                {isConfigured ? t.adminSignInDesc : t.adminSetupDesc}
+              </p>
+            </div>
           </div>
 
-          {authError && (
-            <p className="text-xs text-red-400 bg-red-500/10 border border-red-400/30 rounded-xl px-3 py-2 max-w-sm mx-auto">
-              {authError}
-            </p>
-          )}
+          <form onSubmit={handleAuthSubmit} noValidate className="space-y-4">
+            <div>
+              <label
+                htmlFor="admin-username"
+                className={`block text-xs font-medium mb-1.5 ${
+                  isLight ? 'text-slate-700' : 'text-slate-200'
+                }`}
+              >
+                {t.adminUsernameLabel}
+              </label>
+              <div className="relative">
+                <UserIcon className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  id="admin-username"
+                  name="username"
+                  type="text"
+                  autoComplete="username"
+                  value={usernameInput}
+                  onChange={(e) => {
+                    setUsernameInput(e.target.value);
+                    if (authError) setAuthError(null);
+                  }}
+                  placeholder={t.adminUsernamePlaceholder}
+                  className={`w-full pl-10 pr-3.5 py-2.5 rounded-xl border text-sm outline-none focus:ring-2 transition-all ${inputSurface}`}
+                />
+              </div>
+            </div>
 
-          <button
-            type="button"
-            onClick={handleGoogleSignIn}
-            disabled={isSigningIn}
-            className="inline-flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl font-semibold text-sm bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 hover:from-amber-300 hover:to-amber-400 text-[#060d1f] shadow-[0_8px_24px_rgba(245,158,11,0.3)] disabled:opacity-65 transition-all active:scale-95"
-          >
-            {isSigningIn ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>{t.adminSigningIn}</span>
-              </>
-            ) : (
-              <>
-                <ShieldCheck className="w-4 h-4" />
-                <span>{t.adminSignInBtn}</span>
-              </>
+            <div>
+              <label
+                htmlFor="admin-password"
+                className={`block text-xs font-medium mb-1.5 ${
+                  isLight ? 'text-slate-700' : 'text-slate-200'
+                }`}
+              >
+                {t.adminPasswordLabel}
+              </label>
+              <div className="relative">
+                <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  id="admin-password"
+                  name="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete={isConfigured ? 'current-password' : 'new-password'}
+                  value={passwordInput}
+                  onChange={(e) => {
+                    setPasswordInput(e.target.value);
+                    if (authError) setAuthError(null);
+                  }}
+                  placeholder={t.adminPasswordPlaceholder}
+                  className={`w-full pl-10 pr-10 py-2.5 rounded-xl border text-sm outline-none focus:ring-2 transition-all ${inputSurface}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-amber-400 transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {authError && (
+              <p
+                role="alert"
+                className={`text-xs rounded-xl px-3.5 py-2.5 border ${
+                  isLight
+                    ? 'text-red-700 bg-red-50 border-red-200'
+                    : 'text-red-300 bg-red-500/15 border-red-400/35'
+                }`}
+              >
+                {authError}
+              </p>
             )}
-          </button>
-        </div>
-      ) : !isAdminVerified ? (
-        /* Signed in with Non-Admin Account */
-        <div
-          className={`rounded-3xl border backdrop-blur-xl p-6 sm:p-8 text-center space-y-4 ${cardSurface}`}
-        >
-          <div className="w-14 h-14 rounded-2xl bg-red-500/15 border border-red-400/30 text-red-400 flex items-center justify-center mx-auto">
-            <ShieldX className="w-7 h-7" />
-          </div>
-          <h1 className="font-display text-xl font-bold text-red-400">
-            {t.adminUnauthorizedTitle}
-          </h1>
-          <p
-            className={`text-xs sm:text-sm max-w-md mx-auto ${
-              isLight ? 'text-slate-600' : 'text-slate-300'
-            }`}
-          >
-            {t.adminUnauthorizedDesc}
-          </p>
-          <div
-            className={`text-[11px] font-mono px-3.5 py-2 rounded-xl border max-w-md mx-auto break-all ${
-              isLight
-                ? 'bg-slate-50 border-slate-200 text-slate-600'
-                : 'bg-[#050d20] border-white/10 text-slate-300'
-            }`}
-          >
-            <div>Email: {user.email || 'Unknown'}</div>
-            <div>UID: {user.uid}</div>
-          </div>
-          <button
-            type="button"
-            onClick={handleSignOut}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-500 hover:bg-red-400 text-white text-xs font-semibold transition-colors"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>{t.adminSignOut}</span>
-          </button>
+
+            <button
+              type="submit"
+              disabled={isSubmittingAuth}
+              className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 hover:from-amber-300 hover:to-amber-400 text-[#060d1f] shadow-[0_8px_24px_rgba(245,158,11,0.3)] disabled:opacity-65 transition-all active:scale-[0.99]"
+            >
+              {isSubmittingAuth ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>{isConfigured ? t.adminSigningIn : t.adminSettingUp}</span>
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>{isConfigured ? t.adminSignInBtn : t.adminSetupBtn}</span>
+                </>
+              )}
+            </button>
+          </form>
         </div>
       ) : (
-        /* Verified Admin Inbox Dashboard */
+        /* Authenticated Admin Inbox Dashboard */
         <div className="space-y-5">
-          {/* Top Identity & Stats Card */}
           <div
             className={`rounded-3xl border backdrop-blur-xl p-5 sm:p-6 relative overflow-hidden ${cardSurface}`}
           >
@@ -514,31 +627,55 @@ export function AdminPage({
                 </div>
               </div>
 
-              {/* Verified Admin UID Badge */}
-              <button
-                type="button"
-                onClick={() => handleCopyText(user.uid, 'admin-uid')}
-                title={t.adminCopyUid}
-                className={`px-3 py-1.5 rounded-xl border text-left transition-colors ${
+              <div className="flex items-center gap-2">
+                <div
+                  className={`px-3 py-1.5 rounded-xl border text-left ${
+                    isLight
+                      ? 'bg-slate-50 border-slate-200 text-slate-700'
+                      : 'bg-[#050d20]/85 border-amber-400/25 text-amber-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider opacity-80">
+                    <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                    <span>{t.adminSessionBadge}</span>
+                  </div>
+                  <div className="font-mono text-xs font-semibold mt-0.5">
+                    @{adminUsername || 'admin'}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    playTapSound(soundEnabled);
+                    if (authToken) void fetchMessages(authToken);
+                  }}
+                  disabled={isLoadingMessages}
+                  title={t.adminRefresh}
+                  aria-label={t.adminRefresh}
+                  className={`h-11 w-11 rounded-xl border flex items-center justify-center transition-colors disabled:opacity-50 ${
+                    isLight
+                      ? 'bg-white hover:bg-slate-100 border-slate-200 text-slate-700'
+                      : 'bg-[#050d20]/85 hover:bg-[#0a1838] border-amber-400/25 text-amber-300'
+                  }`}
+                >
+                  <RefreshCw className={`w-4 h-4 ${isLoadingMessages ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            </div>
+
+            {actionError && (
+              <div
+                role="alert"
+                className={`mt-4 text-xs rounded-xl px-3.5 py-2.5 border ${
                   isLight
-                    ? 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
-                    : 'bg-[#050d20]/85 hover:bg-[#0a1838] border-amber-400/25 text-amber-200'
+                    ? 'bg-red-50 border-red-200 text-red-700'
+                    : 'bg-red-500/15 border-red-400/35 text-red-300'
                 }`}
               >
-                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider opacity-80">
-                  <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                  <span>{t.adminUidLabel}</span>
-                </div>
-                <div className="flex items-center gap-1.5 font-mono text-[11px] mt-0.5">
-                  <span className="truncate max-w-[155px]">{user.uid}</span>
-                  {copiedId === 'admin-uid' ? (
-                    <Check className="w-3 h-3 text-emerald-400 shrink-0" />
-                  ) : (
-                    <Copy className="w-3 h-3 opacity-70 shrink-0" />
-                  )}
-                </div>
-              </button>
-            </div>
+                {actionError}
+              </div>
+            )}
 
             {/* Summary Counters */}
             <div className="grid grid-cols-3 gap-3 mt-5">
@@ -626,18 +763,14 @@ export function AdminPage({
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={t.adminSearchPlaceholder}
-                  className={`w-full pl-9 pr-3 py-2 rounded-xl border text-xs sm:text-sm outline-none focus:ring-2 transition-all ${
-                    isLight
-                      ? 'bg-slate-50 border-slate-200 text-slate-900 focus:border-amber-500 focus:ring-amber-500/20'
-                      : 'bg-[#050d20]/85 border-white/15 text-white placeholder:text-slate-400 focus:border-amber-400 focus:ring-amber-400/20'
-                  }`}
+                  className={`w-full pl-9 pr-3 py-2 rounded-xl border text-xs sm:text-sm outline-none focus:ring-2 transition-all ${inputSurface}`}
                 />
               </div>
             </div>
           </div>
 
           {/* Messages List */}
-          {isLoadingMessages ? (
+          {isLoadingMessages && messages.length === 0 ? (
             <div
               className={`rounded-3xl border p-10 flex flex-col items-center justify-center gap-3 ${cardSurface}`}
             >
