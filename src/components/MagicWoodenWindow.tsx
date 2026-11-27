@@ -57,6 +57,47 @@ interface FloatingMote {
   phase: number;
 }
 
+interface Cloud {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  speed: number;
+  opacity: number;
+  puffs: Array<{ dx: number; dy: number; rx: number; ry: number }>;
+}
+
+interface Star {
+  x: number;
+  y: number;
+  size: number;
+  speed: number;
+  phase: number;
+  tint: string;
+}
+
+interface GardenFirefly {
+  baseX: number;
+  baseY: number;
+  phase: number;
+  speed: number;
+  radius: number;
+}
+
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+// Smooth 28s cycle: Golden Sunset Day -> Dusk -> Starry Moonlit Night -> Dawn
+function getNightFactor(timeSec: number): number {
+  const cycle = (timeSec % 28) / 28;
+  if (cycle < 0.28) return 0;
+  if (cycle < 0.46) return smoothstep(0.28, 0.46, cycle);
+  if (cycle < 0.80) return 1;
+  return 1 - smoothstep(0.80, 1.0, cycle);
+}
+
 // Shoreline boundaries matching mosque_pond_sunset_clean_1795742934385.jpg
 function getPondBounds(ny: number): { minX: number; maxX: number } {
   const t = Math.max(0, Math.min(1, (ny - 0.57) / 0.41));
@@ -65,7 +106,15 @@ function getPondBounds(ny: number): { minX: number; maxX: number } {
   return { minX, maxX };
 }
 
-function LivingNatureCanvas({ isOpen }: { isOpen: boolean }) {
+function LivingNatureCanvas({
+  isOpen,
+  imgRef,
+  sunRaysRef,
+}: {
+  isOpen: boolean;
+  imgRef: React.RefObject<HTMLImageElement | null>;
+  sunRaysRef: React.RefObject<HTMLDivElement | null>;
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const isOpenRef = useRef(isOpen);
 
@@ -146,6 +195,103 @@ function LivingNatureCanvas({ isOpen }: { isOpen: boolean }) {
       phase: Math.random() * Math.PI * 2,
     }));
 
+    const clouds: Cloud[] = [
+      {
+        x: 0.12,
+        y: 0.09,
+        width: 0.24,
+        height: 0.055,
+        speed: 0.008,
+        opacity: 0.62,
+        puffs: [
+          { dx: -0.34, dy: 0.18, rx: 0.28, ry: 0.58 },
+          { dx: -0.1, dy: -0.1, rx: 0.34, ry: 0.78 },
+          { dx: 0.18, dy: 0.02, rx: 0.32, ry: 0.68 },
+          { dx: 0.38, dy: 0.22, rx: 0.24, ry: 0.52 },
+        ],
+      },
+      {
+        x: 0.56,
+        y: 0.065,
+        width: 0.28,
+        height: 0.048,
+        speed: 0.0055,
+        opacity: 0.5,
+        puffs: [
+          { dx: -0.38, dy: 0.16, rx: 0.26, ry: 0.55 },
+          { dx: -0.08, dy: -0.08, rx: 0.38, ry: 0.72 },
+          { dx: 0.22, dy: 0.05, rx: 0.32, ry: 0.64 },
+          { dx: 0.44, dy: 0.2, rx: 0.22, ry: 0.48 },
+        ],
+      },
+      {
+        x: 0.85,
+        y: 0.15,
+        width: 0.21,
+        height: 0.045,
+        speed: 0.01,
+        opacity: 0.56,
+        puffs: [
+          { dx: -0.3, dy: 0.15, rx: 0.28, ry: 0.58 },
+          { dx: 0.0, dy: -0.12, rx: 0.36, ry: 0.78 },
+          { dx: 0.3, dy: 0.12, rx: 0.28, ry: 0.56 },
+        ],
+      },
+      {
+        x: -0.14,
+        y: 0.21,
+        width: 0.26,
+        height: 0.042,
+        speed: 0.007,
+        opacity: 0.44,
+        puffs: [
+          { dx: -0.36, dy: 0.12, rx: 0.3, ry: 0.54 },
+          { dx: -0.05, dy: -0.06, rx: 0.38, ry: 0.72 },
+          { dx: 0.28, dy: 0.1, rx: 0.3, ry: 0.56 },
+        ],
+      },
+      {
+        x: 0.36,
+        y: 0.135,
+        width: 0.18,
+        height: 0.036,
+        speed: 0.0115,
+        opacity: 0.42,
+        puffs: [
+          { dx: -0.26, dy: 0.14, rx: 0.3, ry: 0.56 },
+          { dx: 0.04, dy: -0.08, rx: 0.38, ry: 0.75 },
+          { dx: 0.32, dy: 0.14, rx: 0.26, ry: 0.52 },
+        ],
+      },
+    ];
+
+    const stars: Star[] = Array.from({ length: 76 }, () => ({
+      x: 0.02 + Math.random() * 0.96,
+      y: 0.02 + Math.random() * 0.38,
+      size: 0.55 + Math.random() * 1.15,
+      speed: 1.5 + Math.random() * 3.0,
+      phase: Math.random() * Math.PI * 2,
+      tint:
+        Math.random() > 0.72
+          ? '254, 243, 199'
+          : Math.random() > 0.45
+            ? '224, 242, 254'
+            : '255, 255, 255',
+    }));
+
+    const gardenFireflies: GardenFirefly[] = [
+      { baseX: 0.08, baseY: 0.62, phase: 0.2, speed: 0.85, radius: 0.03 },
+      { baseX: 0.14, baseY: 0.73, phase: 1.4, speed: 0.72, radius: 0.035 },
+      { baseX: 0.19, baseY: 0.54, phase: 2.6, speed: 0.92, radius: 0.025 },
+      { baseX: 0.11, baseY: 0.84, phase: 3.8, speed: 0.68, radius: 0.04 },
+      { baseX: 0.23, baseY: 0.66, phase: 5.1, speed: 0.78, radius: 0.028 },
+      { baseX: 0.78, baseY: 0.56, phase: 0.9, speed: 0.8, radius: 0.03 },
+      { baseX: 0.85, baseY: 0.64, phase: 2.1, speed: 0.9, radius: 0.032 },
+      { baseX: 0.91, baseY: 0.76, phase: 3.4, speed: 0.74, radius: 0.034 },
+      { baseX: 0.81, baseY: 0.82, phase: 4.7, speed: 0.82, radius: 0.028 },
+      { baseX: 0.93, baseY: 0.59, phase: 5.8, speed: 0.88, radius: 0.026 },
+    ];
+
     let isVisible = true;
     const io = new IntersectionObserver(
       ([entry]) => {
@@ -158,6 +304,7 @@ function LivingNatureCanvas({ isOpen }: { isOpen: boolean }) {
     let rafId = 0;
     let lastTime = performance.now();
     let ambientRippleTimer = 0;
+    let openBlend = isOpenRef.current ? 1 : 0;
 
     const drawFish = (fish: Fish, w: number, h: number, time: number) => {
       const px = fish.x * w;
@@ -291,6 +438,220 @@ function LivingNatureCanvas({ isOpen }: { isOpen: boolean }) {
       ctx.restore();
     };
 
+    const drawNightSkyAndMoon = (w: number, h: number, timeSec: number, night: number) => {
+      if (night <= 0.01) return;
+
+      // Deep indigo-navy twilight wash over upper sky
+      ctx.save();
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, h * 0.56);
+      skyGrad.addColorStop(0, `rgba(4, 10, 28, ${night * 0.78})`);
+      skyGrad.addColorStop(0.55, `rgba(11, 23, 52, ${night * 0.64})`);
+      skyGrad.addColorStop(1, `rgba(18, 32, 62, ${night * 0.25})`);
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, w, h * 0.56);
+
+      // Deep nocturnal mirror tint over pond
+      const pondGrad = ctx.createLinearGradient(0, h * 0.56, 0, h);
+      pondGrad.addColorStop(0, `rgba(8, 17, 42, ${night * 0.45})`);
+      pondGrad.addColorStop(1, `rgba(4, 10, 26, ${night * 0.65})`);
+      ctx.fillStyle = pondGrad;
+      ctx.fillRect(0, h * 0.56, w, h * 0.44);
+
+      // Twinkling stars
+      const starVisibility = Math.pow(night, 1.45);
+      for (const s of stars) {
+        const twinkle = 0.45 + 0.55 * Math.sin(timeSec * s.speed + s.phase);
+        const alpha = starVisibility * twinkle * 0.9;
+        const sx = s.x * w;
+        const sy = s.y * h;
+        const sr = s.size * dpr * 0.85;
+
+        ctx.fillStyle = `rgba(${s.tint}, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (s.size > 1.3 && twinkle > 0.75) {
+          ctx.fillStyle = `rgba(${s.tint}, ${alpha * 0.28})`;
+          ctx.beginPath();
+          ctx.arc(sx, sy, sr * 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // Luminous Moon in upper-right sky
+      const moonX = 0.79 * w;
+      const moonY = (0.175 - night * 0.025) * h;
+      const moonR = 0.036 * w;
+
+      const moonHalo = ctx.createRadialGradient(moonX, moonY, moonR * 0.4, moonX, moonY, moonR * 4.2);
+      moonHalo.addColorStop(0, `rgba(241, 245, 249, ${night * 0.42})`);
+      moonHalo.addColorStop(0.35, `rgba(191, 219, 254, ${night * 0.16})`);
+      moonHalo.addColorStop(1, 'rgba(15, 23, 42, 0)');
+      ctx.fillStyle = moonHalo;
+      ctx.beginPath();
+      ctx.arc(moonX, moonY, moonR * 4.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      const moonDisc = ctx.createRadialGradient(
+        moonX - moonR * 0.25,
+        moonY - moonR * 0.25,
+        moonR * 0.1,
+        moonX,
+        moonY,
+        moonR
+      );
+      moonDisc.addColorStop(0, `rgba(255, 255, 250, ${night * 0.98})`);
+      moonDisc.addColorStop(0.75, `rgba(241, 245, 249, ${night * 0.95})`);
+      moonDisc.addColorStop(1, `rgba(203, 213, 225, ${night * 0.9})`);
+      ctx.fillStyle = moonDisc;
+      ctx.beginPath();
+      ctx.arc(moonX, moonY, moonR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Subtle natural lunar maria shading
+      ctx.fillStyle = `rgba(148, 163, 184, ${night * 0.18})`;
+      ctx.beginPath();
+      ctx.arc(moonX + moonR * 0.22, moonY - moonR * 0.12, moonR * 0.28, 0, Math.PI * 2);
+      ctx.arc(moonX - moonR * 0.26, moonY + moonR * 0.24, moonR * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Moon & Starlight Reflection on the Pond Water
+      const reflectAlpha = night * 0.65;
+      for (let i = 0; i < 16; i++) {
+        const ny = 0.63 + (i / 16) * 0.31;
+        const waveShift = Math.sin(timeSec * 1.9 + i * 1.3) * 0.012 * w;
+        const streakW = (0.014 + Math.sin(timeSec * 1.4 + i) * 0.008 + (i / 16) * 0.018) * w;
+        const a = reflectAlpha * (0.28 + 0.35 * (1 - i / 16)) * (0.7 + 0.3 * Math.sin(timeSec * 2.2 + i));
+        ctx.fillStyle = `rgba(226, 232, 240, ${a})`;
+        ctx.beginPath();
+        ctx.ellipse(moonX + waveShift, ny * h, streakW, (1.1 + i * 0.08) * dpr, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Scattered twinkling star reflections in the pond
+      for (let i = 0; i < 18; i++) {
+        const ny = 0.62 + ((i * 37) % 34) / 100;
+        const b = getPondBounds(ny);
+        const nx = b.minX + 0.06 + (((i * 53) % 80) / 100) * (b.maxX - b.minX - 0.12);
+        const glint = 0.3 + 0.7 * Math.max(0, Math.sin(timeSec * 2.4 + i * 1.9));
+        ctx.fillStyle = `rgba(224, 242, 254, ${night * glint * 0.42})`;
+        ctx.beginPath();
+        ctx.ellipse(nx * w, ny * h, 1.4 * dpr, 0.8 * dpr, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    };
+
+    const drawClouds = (w: number, h: number, dt: number, night: number) => {
+      ctx.save();
+      for (const cloud of clouds) {
+        cloud.x += cloud.speed * dt;
+        if (cloud.x > 1.25) {
+          cloud.x = -0.25;
+        }
+
+        const cx = cloud.x * w;
+        const cy = cloud.y * h;
+        const cw = cloud.width * w;
+        const ch = cloud.height * h;
+
+        // Smooth blend between sunlit white/warm-gray (Day) and moonlit silver/slate-gray (Night)
+        const topR = Math.round(255 - night * 92);
+        const topG = Math.round(251 - night * 76);
+        const topB = Math.round(244 - night * 40);
+        const botR = Math.round(205 - night * 145);
+        const botG = Math.round(192 - night * 117);
+        const botB = Math.round(192 - night * 96);
+
+        const baseAlpha = cloud.opacity * (1 - night * 0.46);
+
+        // Soft light-gray underside first for realistic depth
+        for (const p of cloud.puffs) {
+          const px = cx + p.dx * cw;
+          const py = cy + (p.dy + 0.14) * ch;
+          const pr = p.rx * cw;
+          const grad = ctx.createRadialGradient(px, py, pr * 0.1, px, py, pr);
+          grad.addColorStop(0, `rgba(${botR}, ${botG}, ${botB}, ${baseAlpha * 0.42})`);
+          grad.addColorStop(0.65, `rgba(${botR}, ${botG}, ${botB}, ${baseAlpha * 0.18})`);
+          grad.addColorStop(1, `rgba(${botR}, ${botG}, ${botB}, 0)`);
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.ellipse(px, py, pr, p.ry * ch, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Soft bright white/moonlit top puffs
+        for (const p of cloud.puffs) {
+          const px = cx + p.dx * cw;
+          const py = cy + p.dy * ch;
+          const pr = p.rx * cw;
+          const grad = ctx.createRadialGradient(px, py - ch * 0.1, pr * 0.08, px, py, pr);
+          grad.addColorStop(0, `rgba(${topR}, ${topG}, ${topB}, ${baseAlpha * 0.65})`);
+          grad.addColorStop(0.55, `rgba(${topR}, ${topG}, ${topB}, ${baseAlpha * 0.3})`);
+          grad.addColorStop(1, `rgba(${topR}, ${topG}, ${topB}, 0)`);
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.ellipse(px, py, pr, p.ry * ch, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    };
+
+    const drawMosqueNightLights = (w: number, h: number, timeSec: number, night: number) => {
+      if (night <= 0.12) return;
+      const glowStrength = smoothstep(0.12, 0.75, night);
+
+      ctx.save();
+      // Subtle warm golden glow on minaret balconies & spires
+      const minaretLights = [
+        { x: 0.342, y: 0.285, r: 0.018 },
+        { x: 0.342, y: 0.355, r: 0.015 },
+        { x: 0.386, y: 0.33, r: 0.014 },
+        { x: 0.619, y: 0.33, r: 0.014 },
+        { x: 0.665, y: 0.285, r: 0.018 },
+        { x: 0.665, y: 0.355, r: 0.015 },
+      ];
+
+      for (const m of minaretLights) {
+        const pulse = 0.88 + 0.12 * Math.sin(timeSec * 2.1 + m.x * 18);
+        const mx = m.x * w;
+        const my = m.y * h;
+        const mr = m.r * w;
+        const g = ctx.createRadialGradient(mx, my, 0, mx, my, mr);
+        g.addColorStop(0, `rgba(254, 240, 138, ${glowStrength * 0.75 * pulse})`);
+        g.addColorStop(0.4, `rgba(245, 158, 11, ${glowStrength * 0.35 * pulse})`);
+        g.addColorStop(1, 'rgba(245, 158, 11, 0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(mx, my, mr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Warm golden arched facade & colonnade glow + soft pond reflection
+      const facadeGlow = ctx.createRadialGradient(0.5 * w, 0.49 * h, 0.01 * w, 0.5 * w, 0.49 * h, 0.13 * w);
+      facadeGlow.addColorStop(0, `rgba(253, 224, 71, ${glowStrength * 0.38})`);
+      facadeGlow.addColorStop(0.5, `rgba(245, 158, 11, ${glowStrength * 0.16})`);
+      facadeGlow.addColorStop(1, 'rgba(245, 158, 11, 0)');
+      ctx.fillStyle = facadeGlow;
+      ctx.beginPath();
+      ctx.ellipse(0.5 * w, 0.49 * h, 0.13 * w, 0.045 * h, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Subtle warm golden facade reflection shimmering in the pond
+      const reflectGlow = ctx.createRadialGradient(0.5 * w, 0.62 * h, 0.01 * w, 0.5 * w, 0.62 * h, 0.11 * w);
+      reflectGlow.addColorStop(0, `rgba(251, 191, 36, ${glowStrength * 0.22})`);
+      reflectGlow.addColorStop(1, 'rgba(245, 158, 11, 0)');
+      ctx.fillStyle = reflectGlow;
+      ctx.beginPath();
+      ctx.ellipse(0.5 * w, 0.62 * h, 0.11 * w, 0.04 * h, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    };
+
     const frame = (now: number) => {
       rafId = requestAnimationFrame(frame);
       if (!isVisible) return;
@@ -298,12 +659,40 @@ function LivingNatureCanvas({ isOpen }: { isOpen: boolean }) {
       const dt = Math.min((now - lastTime) / 1000, 0.05);
       lastTime = now;
       const timeSec = now / 1000;
+      const nightFactor = getNightFactor(timeSec);
+
+      // Smoothly interpolate window open/close lighting factor
+      const targetOpen = isOpenRef.current ? 1 : 0;
+      openBlend += (targetOpen - openBlend) * Math.min(1, dt * 3.2);
+
+      // Sync base photograph lighting smoothly with Day/Night cycle
+      if (imgRef.current) {
+        const dayBright = 0.62 + openBlend * 0.38;
+        const nightBright = 0.25 + openBlend * 0.15;
+        const b = dayBright + (nightBright - dayBright) * nightFactor;
+        const sat = 1.04 - nightFactor * 0.42;
+        const con = 0.96 + openBlend * 0.06 + nightFactor * 0.1;
+        imgRef.current.style.filter = `brightness(${b.toFixed(3)}) saturate(${sat.toFixed(3)}) contrast(${con.toFixed(3)})`;
+      }
+      if (sunRaysRef.current) {
+        const sunVis = (0.25 + openBlend * 0.75) * (1 - nightFactor * 0.92);
+        sunRaysRef.current.style.opacity = sunVis.toFixed(3);
+      }
 
       const w = canvas.width;
       const h = canvas.height;
       if (w === 0 || h === 0) return;
 
       ctx.clearRect(0, 0, w, h);
+
+      // 0. Day/Night Sky Wash, Moon, Stars & Reflections
+      drawNightSkyAndMoon(w, h, timeSec, nightFactor);
+
+      // 0b. Moving Realistic Clouds (Day & Night dynamic coloring)
+      drawClouds(w, h, dt, nightFactor);
+
+      // 0c. Soft Mosque & Minaret Lights at Night
+      drawMosqueNightLights(w, h, timeSec, nightFactor);
 
       // 1. Subtle Pond Wave Shimmer & Realistic Mosque/Sky Reflection Ripples
       ctx.save();
@@ -317,9 +706,11 @@ function LivingNatureCanvas({ isOpen }: { isOpen: boolean }) {
         const streakW = (0.032 + Math.sin(timeSec * 1.2 + i) * 0.018) * w;
         const shimmerAlpha = 0.03 + 0.048 * (0.5 + 0.5 * Math.sin(timeSec * 1.65 + i * 2.1));
         ctx.fillStyle =
-          i % 3 === 0
-            ? `rgba(254, 240, 138, ${shimmerAlpha * 1.3})`
-            : `rgba(255, 255, 255, ${shimmerAlpha})`;
+          nightFactor > 0.5
+            ? `rgba(203, 213, 225, ${shimmerAlpha * 1.15})`
+            : i % 3 === 0
+              ? `rgba(254, 240, 138, ${shimmerAlpha * 1.3})`
+              : `rgba(255, 255, 255, ${shimmerAlpha})`;
         ctx.beginPath();
         ctx.ellipse(cx * w, ny * h, streakW, (0.85 + (ny - 0.58) * 1.1) * dpr, 0, 0, Math.PI * 2);
         ctx.fill();
@@ -441,20 +832,42 @@ function LivingNatureCanvas({ isOpen }: { isOpen: boolean }) {
         drawBird(bird, w, h);
       }
 
-      // 5. Gentle Golden Sunset Pollen Motes (most vivid when window is open)
-      const moteBoost = isOpenRef.current ? 1 : 0.35;
-      for (const m of motes) {
-        m.x += m.vx * dt + Math.sin(timeSec + m.phase) * 0.002 * dt;
-        m.y += m.vy * dt;
-        if (m.y < 0.05) {
-          m.y = 0.92;
-          m.x = 0.08 + Math.random() * 0.84;
-        }
+      // 5. Daytime Sunset Pollen Motes & Nighttime Garden Fireflies
+      const moteBoost = (isOpenRef.current ? 1 : 0.35) * (1 - nightFactor * 0.85);
+      if (moteBoost > 0.04) {
+        for (const m of motes) {
+          m.x += m.vx * dt + Math.sin(timeSec + m.phase) * 0.002 * dt;
+          m.y += m.vy * dt;
+          if (m.y < 0.05) {
+            m.y = 0.92;
+            m.x = 0.08 + Math.random() * 0.84;
+          }
 
-        ctx.fillStyle = `rgba(254, 240, 138, ${m.alpha * moteBoost * (0.65 + 0.35 * Math.sin(timeSec * 2 + m.phase))})`;
-        ctx.beginPath();
-        ctx.arc(m.x * w, m.y * h, m.size * dpr * 0.65, 0, Math.PI * 2);
-        ctx.fill();
+          ctx.fillStyle = `rgba(254, 240, 138, ${m.alpha * moteBoost * (0.65 + 0.35 * Math.sin(timeSec * 2 + m.phase))})`;
+          ctx.beginPath();
+          ctx.arc(m.x * w, m.y * h, m.size * dpr * 0.65, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      if (nightFactor > 0.2) {
+        const ffVisibility = smoothstep(0.2, 0.75, nightFactor);
+        for (const ff of gardenFireflies) {
+          const pulse = Math.max(0, Math.sin(timeSec * 1.6 + ff.phase * 2.1));
+          if (pulse < 0.08) continue;
+          const fx = (ff.baseX + Math.sin(timeSec * ff.speed + ff.phase) * ff.radius) * w;
+          const fy = (ff.baseY + Math.cos(timeSec * ff.speed * 0.8 + ff.phase) * ff.radius * 0.7) * h;
+          const alpha = ffVisibility * pulse;
+
+          const halo = ctx.createRadialGradient(fx, fy, 0, fx, fy, 5.5 * dpr);
+          halo.addColorStop(0, `rgba(254, 249, 195, ${alpha * 0.95})`);
+          halo.addColorStop(0.45, `rgba(250, 204, 21, ${alpha * 0.45})`);
+          halo.addColorStop(1, 'rgba(250, 204, 21, 0)');
+          ctx.fillStyle = halo;
+          ctx.beginPath();
+          ctx.arc(fx, fy, 5.5 * dpr, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     };
 
@@ -980,6 +1393,8 @@ function CasementWindowSash({
 
 export function MagicWoodenWindow({ soundEnabled }: MagicWoodenWindowProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const scenicImgRef = useRef<HTMLImageElement | null>(null);
+  const sunRaysRef = useRef<HTMLDivElement | null>(null);
 
   const handleToggle = () => {
     const next = !isOpen;
@@ -1093,24 +1508,26 @@ export function MagicWoodenWindow({ soundEnabled }: MagicWoodenWindowProps) {
               {/* LIVING NATURE SCENERY (VISIBLE BEHIND GLASS & REVEALED WHEN OPEN) */}
               <div className="absolute inset-0 overflow-hidden rounded-[2px]">
                 <img
+                  ref={scenicImgRef}
                   src={scenicVistaImg}
                   alt="White marble mosque, minarets, clear pond with reflections, flower gardens, and golden sunset"
                   referrerPolicy="no-referrer"
-                  className={`w-full h-full object-cover object-center transition-all duration-[1300ms] ease-out ${
-                    isOpen
-                      ? 'scale-[1.02] brightness-100 contrast-[1.02]'
-                      : 'scale-100 brightness-[0.62] contrast-95'
+                  className={`w-full h-full object-cover object-center transition-transform duration-[1300ms] ease-out ${
+                    isOpen ? 'scale-[1.02]' : 'scale-100'
                   }`}
                 />
 
-                {/* Live 60fps Canvas: Swimming Fish, Flying Birds, Water Ripples, Golden Motes */}
-                <LivingNatureCanvas isOpen={isOpen} />
+                {/* Live 60fps Canvas: Day/Night Sky, Moving Clouds, Fish, Birds, Water Ripples, Fireflies */}
+                <LivingNatureCanvas
+                  isOpen={isOpen}
+                  imgRef={scenicImgRef}
+                  sunRaysRef={sunRaysRef}
+                />
 
                 {/* Cinematic Sunset Rays & Inner Shadow Depth */}
                 <div
-                  className={`pointer-events-none absolute inset-0 z-20 transition-opacity duration-1000 ${
-                    isOpen ? 'opacity-100' : 'opacity-25'
-                  }`}
+                  ref={sunRaysRef}
+                  className="pointer-events-none absolute inset-0 z-20"
                 >
                   <div
                     className="absolute inset-0 animate-sunbeam-pulse"
