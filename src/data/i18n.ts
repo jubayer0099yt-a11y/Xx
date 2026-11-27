@@ -139,6 +139,8 @@ export const TRANSLATIONS = {
     adminEmptyTitle: 'No Messages Found',
     adminEmptyDesc: 'Incoming visitor messages from your Contact Me form will appear here.',
     adminSessionBadge: 'Server Session Active',
+    adminApiUnreachable: 'Backend authentication server (/api/admin/*) is unreachable on this static host. Open the live full-stack server URL or deploy with Node/Serverless backend & Environment Variables.',
+    adminInvalidHashConfig: 'Server ADMIN_PASSWORD_HASH format is invalid. Set ADMIN_PASSWORD or a valid scrypt$salt$hash in environment secrets.',
   },
   bn: {
     appTitle: 'জুবায়ের',
@@ -278,5 +280,7 @@ export const TRANSLATIONS = {
     adminEmptyTitle: 'কোনো মেসেজ নেই',
     adminEmptyDesc: 'আপনার Contact Me ফর্ম থেকে পাঠানো সব মেসেজ এখানে দেখা যাবে।',
     adminSessionBadge: 'সার্ভার সেশন সক্রিয়',
+    adminApiUnreachable: 'এই হোস্টিংয়ে সার্ভার-সাইড Authentication API (/api/admin/*) পাওয়া যাচ্ছে না। অনুগ্রহ করে ফুল-স্ট্যাক সার্ভার URL ব্যবহার করুন অথবা Node/Backend ও Environment Variables সহ Deploy করুন।',
+    adminInvalidHashConfig: 'সার্ভারের ADMIN_PASSWORD_HASH ফরম্যাট সঠিক নয়। Secrets-এ ADMIN_PASSWORD অথবা সঠিক scrypt$salt$hash সেট করুন।',
   },
 };

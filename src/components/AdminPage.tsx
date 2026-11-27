@@ -83,6 +83,7 @@ export function AdminPage({
 
   const [statusLoading, setStatusLoading] = useState(true);
   const [isConfigured, setIsConfigured] = useState(true);
+  const [apiUnreachable, setApiUnreachable] = useState(false);
 
   // Session Bearer token kept exclusively in React memory (never localStorage/sessionStorage)
   const [authToken, setAuthToken] = useState<string | null>(null);
@@ -103,18 +104,36 @@ export function AdminPage({
   const [busyMessageId, setBusyMessageId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Check whether server admin credentials have been configured
+  // Check whether server admin credentials have been configured and API is reachable
   useEffect(() => {
     let active = true;
     async function loadStatus() {
       try {
         const res = await fetch('/api/admin/status', { cache: 'no-store' });
-        const data = await res.json().catch(() => ({}));
-        if (active && res.ok && typeof data?.configured === 'boolean') {
+        const contentType = res.headers.get('content-type') || '';
+        if (!res.ok || !contentType.includes('application/json')) {
+          if (active) {
+            setApiUnreachable(true);
+            setAuthError(t.adminApiUnreachable);
+          }
+          return;
+        }
+        const data = await res.json();
+        if (active && typeof data?.configured === 'boolean') {
+          setApiUnreachable(false);
           setIsConfigured(data.configured);
+          if (data.invalidHashConfig) {
+            setAuthError(t.adminInvalidHashConfig);
+          }
+        } else if (active) {
+          setApiUnreachable(true);
+          setAuthError(t.adminApiUnreachable);
         }
       } catch {
-        // Default to standard login screen on temporary network glitch
+        if (active) {
+          setApiUnreachable(true);
+          setAuthError(t.adminApiUnreachable);
+        }
       } finally {
         if (active) setStatusLoading(false);
       }
@@ -123,7 +142,7 @@ export function AdminPage({
     return () => {
       active = false;
     };
-  }, []);
+  }, [t.adminApiUnreachable, t.adminInvalidHashConfig]);
 
   const clearSession = useCallback((errorMsg?: string) => {
     setAuthToken(null);
@@ -185,6 +204,11 @@ export function AdminPage({
     playTapSound(soundEnabled);
     setAuthError(null);
 
+    if (apiUnreachable) {
+      setAuthError(t.adminApiUnreachable);
+      return;
+    }
+
     const cleanUsername = usernameInput.trim();
     if (!cleanUsername || !passwordInput) {
       setAuthError(t.adminErrRequired);
@@ -204,25 +228,46 @@ export function AdminPage({
           password: passwordInput,
         }),
       });
+
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        setApiUnreachable(true);
+        setAuthError(t.adminApiUnreachable);
+        return;
+      }
+
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok || !data?.ok || typeof data?.token !== 'string') {
         if (res.status === 403 && !isConfigured) {
           setIsConfigured(true);
         }
-        if (res.status === 412) {
+        if (res.status === 412 || data?.code === 'NOT_CONFIGURED') {
           setIsConfigured(false);
+        }
+        if (data?.code === 'INVALID_HASH_CONFIG') {
+          setAuthError(t.adminInvalidHashConfig);
+          return;
+        }
+        if (res.status === 401) {
+          setAuthError(
+            lang === 'bn'
+              ? 'ভুল Username বা Password দেওয়া হয়েছে।'
+              : typeof data?.error === 'string' && data.error.length > 0
+                ? data.error
+                : 'Invalid username or password.'
+          );
+          return;
         }
         const errMsg =
           typeof data?.error === 'string' && data.error.length > 0
             ? data.error
-            : lang === 'bn'
-              ? 'ভুল Username বা Password দেওয়া হয়েছে।'
-              : 'Invalid username or password.';
+            : t.adminApiUnreachable;
         setAuthError(errMsg);
         return;
       }
 
+      setApiUnreachable(false);
       setIsConfigured(true);
       setAuthToken(data.token);
       setAdminUsername(typeof data.username === 'string' ? data.username : cleanUsername);

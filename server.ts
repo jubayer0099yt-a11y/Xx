@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import fs from 'fs';
@@ -24,6 +25,18 @@ function timingSafeTextEqual(a: string, b: string): boolean {
   return crypto.timingSafeEqual(digestA, digestB);
 }
 
+function isValidScryptHashFormat(storedHash: string): boolean {
+  const parts = storedHash.split('$');
+  return (
+    parts.length === 3 &&
+    parts[0] === 'scrypt' &&
+    Boolean(parts[1]) &&
+    /^[0-9a-fA-F]+$/.test(parts[2] || '') &&
+    (parts[2]?.length || 0) >= 32 &&
+    (parts[2]?.length || 0) % 2 === 0
+  );
+}
+
 function hashPasswordScrypt(password: string): string {
   const salt = crypto.randomBytes(16).toString('hex');
   const derived = crypto.scryptSync(password, salt, 64).toString('hex');
@@ -31,14 +44,10 @@ function hashPasswordScrypt(password: string): string {
 }
 
 function verifyPasswordScrypt(password: string, storedHash: string): boolean {
-  const parts = storedHash.split('$');
-  if (parts.length !== 3 || parts[0] !== 'scrypt') {
+  if (!isValidScryptHashFormat(storedHash)) {
     return false;
   }
-  const [, salt, expectedHex] = parts;
-  if (!salt || !expectedHex || expectedHex.length % 2 !== 0) {
-    return false;
-  }
+  const [, salt, expectedHex] = storedHash.split('$');
   try {
     const expectedBuf = Buffer.from(expectedHex, 'hex');
     const derivedBuf = crypto.scryptSync(password, salt, expectedBuf.length);
@@ -100,27 +109,51 @@ async function startServer() {
 
   const revokedTokenJtis = new Set<string>();
 
-  // If ADMIN_PASSWORD (plaintext env secret) is supplied without ADMIN_PASSWORD_HASH,
-  // hash it once in memory using scrypt so comparisons always go through scrypt + timingSafeEqual.
-  const envPlainPassword = process.env.ADMIN_PASSWORD?.trim();
-  const envPasswordHashFromPlain = envPlainPassword
-    ? hashPasswordScrypt(envPlainPassword)
-    : null;
+  // Cache scrypt hash derived from ADMIN_PASSWORD env secret (recomputes only if env changes)
+  let cachedPlainSource: string | null = null;
+  let cachedPlainHash: string | null = null;
 
   function getConfiguredAdmin(): {
     configured: boolean;
+    invalidHashConfig: boolean;
     source: 'env' | 'file' | 'none';
     username: string | null;
     passwordHash: string | null;
   } {
     const envUsername = process.env.ADMIN_USERNAME?.trim();
-    const envHash = process.env.ADMIN_PASSWORD_HASH?.trim() || envPasswordHashFromPlain;
-    if (envUsername && envHash) {
+    const rawEnvHash = process.env.ADMIN_PASSWORD_HASH?.trim();
+    const envPlainPassword = process.env.ADMIN_PASSWORD;
+
+    if (envUsername && rawEnvHash) {
+      if (!isValidScryptHashFormat(rawEnvHash)) {
+        return {
+          configured: false,
+          invalidHashConfig: true,
+          source: 'env',
+          username: envUsername,
+          passwordHash: null,
+        };
+      }
       return {
         configured: true,
+        invalidHashConfig: false,
         source: 'env',
         username: envUsername,
-        passwordHash: envHash,
+        passwordHash: rawEnvHash,
+      };
+    }
+
+    if (envUsername && typeof envPlainPassword === 'string' && envPlainPassword.length > 0) {
+      if (cachedPlainSource !== envPlainPassword || !cachedPlainHash) {
+        cachedPlainSource = envPlainPassword;
+        cachedPlainHash = hashPasswordScrypt(envPlainPassword);
+      }
+      return {
+        configured: true,
+        invalidHashConfig: false,
+        source: 'env',
+        username: envUsername,
+        passwordHash: cachedPlainHash,
       };
     }
 
@@ -132,10 +165,11 @@ async function startServer() {
           typeof parsed.username === 'string' &&
           typeof parsed.passwordHash === 'string' &&
           parsed.username.length > 0 &&
-          parsed.passwordHash.startsWith('scrypt$')
+          isValidScryptHashFormat(parsed.passwordHash)
         ) {
           return {
             configured: true,
+            invalidHashConfig: false,
             source: 'file',
             username: parsed.username,
             passwordHash: parsed.passwordHash,
@@ -148,6 +182,7 @@ async function startServer() {
 
     return {
       configured: false,
+      invalidHashConfig: false,
       source: 'none',
       username: null,
       passwordHash: null,
@@ -472,15 +507,25 @@ async function startServer() {
     return res.json({
       ok: true,
       configured: admin.configured,
+      invalidHashConfig: admin.invalidHashConfig,
+      source: admin.source,
     });
   });
 
   app.post('/api/admin/setup', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     const admin = getConfiguredAdmin();
+    if (admin.invalidHashConfig) {
+      return res.status(500).json({
+        ok: false,
+        code: 'INVALID_HASH_CONFIG',
+        error: 'Server ADMIN_PASSWORD_HASH format is invalid. Use scrypt$salt$hash or set ADMIN_PASSWORD.',
+      });
+    }
     if (admin.configured) {
       return res.status(403).json({
         ok: false,
+        code: 'ALREADY_CONFIGURED',
         error: 'Admin credentials are already configured.',
       });
     }
@@ -532,6 +577,7 @@ async function startServer() {
       if (code === 'EEXIST') {
         return res.status(403).json({
           ok: false,
+          code: 'ALREADY_CONFIGURED',
           error: 'Admin credentials are already configured.',
         });
       }
@@ -555,14 +601,23 @@ async function startServer() {
     if (isLoginRateLimited(clientIp)) {
       return res.status(429).json({
         ok: false,
+        code: 'RATE_LIMITED',
         error: 'Too many login attempts. Please wait a few minutes and try again.',
       });
     }
 
     const admin = getConfiguredAdmin();
+    if (admin.invalidHashConfig) {
+      return res.status(500).json({
+        ok: false,
+        code: 'INVALID_HASH_CONFIG',
+        error: 'Server ADMIN_PASSWORD_HASH format is invalid. Use scrypt$salt$hash or set ADMIN_PASSWORD.',
+      });
+    }
     if (!admin.configured || !admin.username || !admin.passwordHash) {
       return res.status(412).json({
         ok: false,
+        code: 'NOT_CONFIGURED',
         error: 'Admin account is not configured yet.',
       });
     }
@@ -588,6 +643,7 @@ async function startServer() {
     if (!usernameValid || !passwordValid) {
       return res.status(401).json({
         ok: false,
+        code: 'INVALID_CREDENTIALS',
         error: 'Invalid username or password.',
       });
     }
