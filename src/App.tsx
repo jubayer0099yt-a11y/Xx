@@ -15,6 +15,13 @@ import { ContactFormSection } from './components/ContactFormSection';
 import { MagicWoodenWindow } from './components/MagicWoodenWindow';
 import { ShareModal } from './components/ShareModal';
 import { LoadingScreen } from './components/LoadingScreen';
+import { AdminPage } from './components/AdminPage';
+import { ErrorBoundary } from './components/ErrorBoundary';
+
+function normalizePath(p: string): string {
+  const clean = p.replace(/\/+$/, '');
+  return clean === '' ? '/' : clean;
+}
 
 export default function App() {
   // Theme state with fallback to 'signature'
@@ -64,6 +71,30 @@ export default function App() {
     });
     return initial;
   });
+
+  // Route state (/ or /admin)
+  const [pathname, setPathname] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return normalizePath(window.location.pathname);
+    }
+    return '/';
+  });
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setPathname(normalizePath(window.location.pathname));
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const navigateTo = (targetPath: string) => {
+    const next = normalizePath(targetPath);
+    if (typeof window !== 'undefined' && normalizePath(window.location.pathname) !== next) {
+      window.history.pushState({}, '', next);
+    }
+    setPathname(next);
+  };
 
   // Modals state
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -124,15 +155,18 @@ export default function App() {
 
 
 
+  const isAdminRoute = pathname === '/admin';
+
   return (
-    <div
-      style={themeConfig.bgStyle}
-      className={`min-h-screen relative overflow-x-hidden transition-all duration-500 ${
-        themeConfig.textColor
-      }`}
-    >
-      {/* Premium Loading Screen */}
-      <LoadingScreen avatarUrl={PROFILE_DATA.avatarUrl} />
+    <ErrorBoundary>
+      <div
+        style={themeConfig.bgStyle}
+        className={`min-h-screen relative overflow-x-hidden transition-all duration-500 ${
+          themeConfig.textColor
+        }`}
+      >
+        {/* Premium Loading Screen (public homepage only) */}
+        {!isAdminRoute && <LoadingScreen avatarUrl={PROFILE_DATA.avatarUrl} />}
 
       {/* Ambient background using the user's artwork with theme-reactive glow */}
       <div className="fixed inset-0 pointer-events-none -z-20 overflow-hidden">
@@ -164,66 +198,79 @@ export default function App() {
         className="fixed bottom-0 right-0 w-[650px] h-[550px] blur-3xl pointer-events-none -z-10 transition-all duration-500"
       />
 
-      {/* Main Content Container */}
-      <main className="w-full max-w-2xl mx-auto px-4 pb-16 flex flex-col items-center">
-        {/* Profile Header with Color Switcher and Language Toggle */}
-        <Header
-          profile={PROFILE_DATA}
-          soundEnabled={soundEnabled}
-          onToggleSound={toggleSound}
-          onOpenShareModal={() => setIsShareModalOpen(true)}
-          onShowToast={showToast}
-          currentTheme={theme}
-          onSelectTheme={setTheme}
-          themeConfig={themeConfig}
+      {isAdminRoute ? (
+        <AdminPage
           lang={lang}
           onSelectLanguage={handleSelectLanguage}
+          soundEnabled={soundEnabled}
+          themeConfig={themeConfig}
+          onNavigateHome={() => navigateTo('/')}
         />
-
-        {/* Quick Circular Social Icons Strip right below Profile Header */}
-        <div className="w-full mt-3">
-          <QuickSocialStrip
-            links={BIO_LINKS}
-            onLinkClick={handleLinkClick}
-            soundEnabled={soundEnabled}
-          />
-        </div>
-
-        {/* Bio Link Cards Feed */}
-        <section className="w-full space-y-3 mt-4" aria-label="Official Links">
-          {BIO_LINKS.map((link) => (
-            <LinkCard
-              key={link.id}
-              link={link}
-              clicks={clicks[link.id] || link.defaultClicks}
-              onLinkClick={handleLinkClick}
+      ) : (
+        <>
+          {/* Main Content Container */}
+          <main className="w-full max-w-2xl mx-auto px-4 pb-16 flex flex-col items-center">
+            {/* Profile Header with Color Switcher and Language Toggle */}
+            <Header
+              profile={PROFILE_DATA}
+              soundEnabled={soundEnabled}
+              onToggleSound={toggleSound}
+              onOpenShareModal={() => setIsShareModalOpen(true)}
               onShowToast={showToast}
+              currentTheme={theme}
+              onSelectTheme={setTheme}
+              themeConfig={themeConfig}
+              lang={lang}
+              onSelectLanguage={handleSelectLanguage}
+            />
+
+            {/* Quick Circular Social Icons Strip right below Profile Header */}
+            <div className="w-full mt-3">
+              <QuickSocialStrip
+                links={BIO_LINKS}
+                onLinkClick={handleLinkClick}
+                soundEnabled={soundEnabled}
+              />
+            </div>
+
+            {/* Bio Link Cards Feed */}
+            <section className="w-full space-y-3 mt-4" aria-label="Official Links">
+              {BIO_LINKS.map((link) => (
+                <LinkCard
+                  key={link.id}
+                  link={link}
+                  clicks={clicks[link.id] || link.defaultClicks}
+                  onLinkClick={handleLinkClick}
+                  onShowToast={showToast}
+                  soundEnabled={soundEnabled}
+                  themeConfig={themeConfig}
+                  lang={lang}
+                />
+              ))}
+            </section>
+
+            {/* Interactive 3D Wooden Window */}
+            <MagicWoodenWindow soundEnabled={soundEnabled} />
+
+            {/* Compact Contact Me Button at the Very Bottom */}
+            <ContactFormSection
               soundEnabled={soundEnabled}
               themeConfig={themeConfig}
               lang={lang}
             />
-          ))}
-        </section>
+          </main>
 
-        {/* Interactive 3D Wooden Window */}
-        <MagicWoodenWindow soundEnabled={soundEnabled} />
-
-        {/* Compact Contact Me Button at the Very Bottom */}
-        <ContactFormSection
-          soundEnabled={soundEnabled}
-          themeConfig={themeConfig}
-          lang={lang}
-        />
-      </main>
-
-      {/* Share Modal */}
-      <ShareModal
-        isOpen={isShareModalOpen}
-        onClose={() => setIsShareModalOpen(false)}
-        soundEnabled={soundEnabled}
-        onShowToast={showToast}
-        lang={lang}
-      />
+          {/* Share Modal */}
+          <ShareModal
+            isOpen={isShareModalOpen}
+            onClose={() => setIsShareModalOpen(false)}
+            soundEnabled={soundEnabled}
+            onShowToast={showToast}
+            lang={lang}
+          />
+        </>
+      )}
     </div>
+    </ErrorBoundary>
   );
 }

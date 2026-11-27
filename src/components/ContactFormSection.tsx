@@ -1,8 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Send, CheckCircle2, AlertCircle, Mail, Loader2, X } from 'lucide-react';
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { ThemeConfig } from '../data/themes';
 import { Language, TRANSLATIONS } from '../data/i18n';
 import { playCopySound, playTapSound } from '../utils/sound';
+import {
+  db,
+  handleFirestoreError,
+  MESSAGE_CONSTRAINTS,
+  OperationType,
+} from '../firebase';
 
 interface ContactFormSectionProps {
   soundEnabled: boolean;
@@ -17,7 +24,46 @@ interface FieldErrors {
   general?: string;
 }
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const RATE_STORAGE_KEY = 'jubayer_contact_sends';
+const RATE_WINDOW_MS = 10 * 60 * 1000;
+const MIN_INTERVAL_MS = 15 * 1000;
+const MAX_SENDS_IN_WINDOW = 3;
+
+function stripControlChars(value: string): string {
+  return value.replace(/[\r\n\x00-\x1f\x7f]/g, ' ').trim();
+}
+
+function checkClientSpamRateLimit(): boolean {
+  try {
+    const raw = localStorage.getItem(RATE_STORAGE_KEY);
+    const now = Date.now();
+    const list: number[] = raw ? JSON.parse(raw) : [];
+    const recent = Array.isArray(list)
+      ? list.filter((ts) => typeof ts === 'number' && now - ts < RATE_WINDOW_MS)
+      : [];
+    if (recent.length >= MAX_SENDS_IN_WINDOW) return true;
+    const latest = recent[recent.length - 1];
+    if (typeof latest === 'number' && now - latest < MIN_INTERVAL_MS) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function recordClientSendTimestamp() {
+  try {
+    const raw = localStorage.getItem(RATE_STORAGE_KEY);
+    const now = Date.now();
+    const list: number[] = raw ? JSON.parse(raw) : [];
+    const recent = Array.isArray(list)
+      ? list.filter((ts) => typeof ts === 'number' && now - ts < RATE_WINDOW_MS)
+      : [];
+    recent.push(now);
+    localStorage.setItem(RATE_STORAGE_KEY, JSON.stringify(recent));
+  } catch {
+    // Ignore storage errors
+  }
+}
 
 export function ContactFormSection({
   soundEnabled,
@@ -62,19 +108,26 @@ export function ContactFormSection({
     setIsOpen(false);
   };
 
-  const validate = (): FieldErrors => {
+  const validate = (cleanName: string, cleanEmail: string, cleanMsg: string): FieldErrors => {
     const nextErrors: FieldErrors = {};
-    const trimmedName = name.trim();
-    const trimmedEmail = email.trim();
-    const trimmedMsg = message.trim();
 
-    if (trimmedName.length < 2) {
+    if (
+      cleanName.length < MESSAGE_CONSTRAINTS.NAME_MIN ||
+      cleanName.length > MESSAGE_CONSTRAINTS.NAME_MAX
+    ) {
       nextErrors.name = t.contactErrName;
     }
-    if (!EMAIL_REGEX.test(trimmedEmail)) {
+    if (
+      cleanEmail.length < MESSAGE_CONSTRAINTS.EMAIL_MIN ||
+      cleanEmail.length > MESSAGE_CONSTRAINTS.EMAIL_MAX ||
+      !MESSAGE_CONSTRAINTS.EMAIL_REGEX.test(cleanEmail)
+    ) {
       nextErrors.email = t.contactErrEmail;
     }
-    if (trimmedMsg.length < 10) {
+    if (
+      cleanMsg.length < MESSAGE_CONSTRAINTS.MESSAGE_MIN ||
+      cleanMsg.length > MESSAGE_CONSTRAINTS.MESSAGE_MAX
+    ) {
       nextErrors.message = t.contactErrMessage;
     }
     return nextErrors;
@@ -84,7 +137,29 @@ export function ContactFormSection({
     e.preventDefault();
     playTapSound(soundEnabled);
 
-    const validationErrors = validate();
+    // Spam guard 1: honeypot check
+    if (honeypot.trim().length > 0) {
+      setErrors({ general: t.contactErrGeneric });
+      return;
+    }
+
+    // Spam guard 2: minimum human fill time (1.2s)
+    if (Date.now() - formLoadedAtRef.current < 1200) {
+      setErrors({ general: t.contactErrRateLimit });
+      return;
+    }
+
+    // Spam guard 3: browser cooldown rate limit
+    if (checkClientSpamRateLimit()) {
+      setErrors({ general: t.contactErrRateLimit });
+      return;
+    }
+
+    const cleanName = stripControlChars(name).slice(0, MESSAGE_CONSTRAINTS.NAME_MAX);
+    const cleanEmail = stripControlChars(email).toLowerCase().slice(0, MESSAGE_CONSTRAINTS.EMAIL_MAX);
+    const cleanMsg = message.replace(/\x00/g, '').trim().slice(0, MESSAGE_CONSTRAINTS.MESSAGE_MAX);
+
+    const validationErrors = validate(cleanName, cleanEmail, cleanMsg);
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       return;
@@ -93,30 +168,22 @@ export function ContactFormSection({
     setErrors({});
     setIsSubmitting(true);
 
+    const messageId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `msg_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    const path = `messages/${messageId}`;
+
     try {
-      const response = await fetch('/api/contact', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: name.trim(),
-          email: email.trim(),
-          message: message.trim(),
-          website: honeypot,
-          formLoadedAt: formLoadedAtRef.current,
-        }),
+      await setDoc(doc(db, 'messages', messageId), {
+        name: cleanName,
+        email: cleanEmail,
+        message: cleanMsg,
+        status: 'unread',
+        createdAt: serverTimestamp(),
       });
 
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok || !data?.ok) {
-        setErrors({
-          general: typeof data?.error === 'string' ? data.error : t.contactErrGeneric,
-        });
-        return;
-      }
-
+      recordClientSendTimestamp();
       playCopySound(soundEnabled);
       setIsSent(true);
       setName('');
@@ -124,7 +191,12 @@ export function ContactFormSection({
       setMessage('');
       setHoneypot('');
       formLoadedAtRef.current = Date.now();
-    } catch {
+    } catch (error) {
+      try {
+        handleFirestoreError(error, OperationType.CREATE, path);
+      } catch {
+        // Show clean error banner to visitor while structured JSON is logged
+      }
       setErrors({ general: t.contactErrGeneric });
     } finally {
       setIsSubmitting(false);
@@ -144,7 +216,7 @@ export function ContactFormSection({
 
   return (
     <>
-      {/* Compact Bottom Trigger Button (styled like the Color Theme utility button) */}
+      {/* Compact Bottom Trigger Button */}
       <div className="w-full mt-5 flex justify-center">
         <button
           type="button"
@@ -296,7 +368,7 @@ export function ContactFormSection({
                       id="contact-name"
                       name="name"
                       type="text"
-                      maxLength={80}
+                      maxLength={MESSAGE_CONSTRAINTS.NAME_MAX}
                       value={name}
                       onChange={(e) => {
                         setName(e.target.value);
@@ -329,7 +401,7 @@ export function ContactFormSection({
                       id="contact-email"
                       name="email"
                       type="email"
-                      maxLength={120}
+                      maxLength={MESSAGE_CONSTRAINTS.EMAIL_MAX}
                       value={email}
                       onChange={(e) => {
                         setEmail(e.target.value);
@@ -364,7 +436,7 @@ export function ContactFormSection({
                     id="contact-message"
                     name="message"
                     rows={4}
-                    maxLength={1500}
+                    maxLength={MESSAGE_CONSTRAINTS.MESSAGE_MAX}
                     value={message}
                     onChange={(e) => {
                       setMessage(e.target.value);
@@ -384,7 +456,7 @@ export function ContactFormSection({
                   )}
                 </div>
 
-                {/* General server/network error */}
+                {/* General server/network/spam error */}
                 {errors.general && (
                   <div
                     role="alert"
