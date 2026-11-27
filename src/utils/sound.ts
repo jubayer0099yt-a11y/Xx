@@ -106,3 +106,60 @@ export function playKittySound(enabled: boolean = true) {
     // Ignore
   }
 }
+
+export function playWindowToggleSound(opening: boolean, enabled: boolean = true) {
+  if (!enabled) return;
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+
+    // Subtle brass latch click
+    const latchOsc = ctx.createOscillator();
+    const latchGain = ctx.createGain();
+    latchOsc.type = 'triangle';
+    latchOsc.frequency.setValueAtTime(opening ? 480 : 340, now);
+    latchOsc.frequency.exponentialRampToValueAtTime(opening ? 760 : 180, now + 0.07);
+    latchGain.gain.setValueAtTime(0.045, now);
+    latchGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+    latchOsc.connect(latchGain);
+    latchGain.connect(ctx.destination);
+    latchOsc.start(now);
+    latchOsc.stop(now + 0.08);
+
+    // Warm harmonic chime on open, soft wood settle on close
+    if (opening) {
+      const notes = [523.25, 659.25, 783.99];
+      notes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const startAt = now + 0.12 + idx * 0.08;
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, startAt);
+        gain.gain.setValueAtTime(0.001, startAt);
+        gain.gain.linearRampToValueAtTime(0.025, startAt + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.0008, startAt + 0.55);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(startAt);
+        osc.stop(startAt + 0.56);
+      });
+    } else {
+      const thud = ctx.createOscillator();
+      const thudGain = ctx.createGain();
+      thud.type = 'sine';
+      thud.frequency.setValueAtTime(145, now + 0.35);
+      thud.frequency.exponentialRampToValueAtTime(65, now + 0.48);
+      thudGain.gain.setValueAtTime(0.001, now + 0.35);
+      thudGain.gain.linearRampToValueAtTime(0.05, now + 0.37);
+      thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+      thud.connect(thudGain);
+      thudGain.connect(ctx.destination);
+      thud.start(now + 0.35);
+      thud.stop(now + 0.51);
+    }
+  } catch {
+    // Ignore audio errors
+  }
+}

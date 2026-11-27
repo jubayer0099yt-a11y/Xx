@@ -294,10 +294,9 @@ export function Header({
             </div>
           </div>
 
-          {/* Verified Badge */}
+          {/* Avatar Verified Icon */}
           <div
             className="absolute bottom-1 right-1 w-8 h-8 rounded-full bg-blue-500 text-white border-2 border-neutral-950 flex items-center justify-center shadow-lg"
-            title={t.tagVerified}
           >
             <VerifiedBadgeIcon className="w-5 h-5 text-white" />
           </div>

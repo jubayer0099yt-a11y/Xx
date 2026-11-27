@@ -11,7 +11,7 @@ import { Language } from './data/i18n';
 import { Header } from './components/Header';
 import { QuickSocialStrip } from './components/QuickSocialStrip';
 import { LinkCard } from './components/LinkCard';
-import { Footer } from './components/Footer';
+import { MagicWoodenWindow } from './components/MagicWoodenWindow';
 import { ShareModal } from './components/ShareModal';
 
 export default function App() {
@@ -200,14 +200,8 @@ export default function App() {
           ))}
         </section>
 
-        {/* Footer */}
-        <Footer
-          copyright={PROFILE_DATA.copyright}
-          onOpenShareModal={() => setIsShareModalOpen(true)}
-          soundEnabled={soundEnabled}
-          themeConfig={themeConfig}
-          lang={lang}
-        />
+        {/* Interactive 3D Wooden Window */}
+        <MagicWoodenWindow soundEnabled={soundEnabled} />
       </main>
 
       {/* Share Modal */}

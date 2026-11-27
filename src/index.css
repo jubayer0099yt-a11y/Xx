@@ -30,3 +30,123 @@
 .tap-bounce:active {
   transform: scale(0.98);
 }
+
+/* 3D Wooden Window & Scenic Atmosphere Animations */
+@keyframes lanternFlicker {
+  0%, 100% {
+    opacity: 0.9;
+    transform: scale(1) translateY(0px);
+  }
+  25% {
+    opacity: 1;
+    transform: scale(1.04) translateY(-1px);
+  }
+  50% {
+    opacity: 0.82;
+    transform: scale(0.97) translateY(0.5px);
+  }
+  75% {
+    opacity: 0.96;
+    transform: scale(1.02) translateY(-0.5px);
+  }
+}
+
+@keyframes vineSway {
+  0%, 100% {
+    transform: rotate(-1.5deg);
+  }
+  50% {
+    transform: rotate(1.8deg);
+  }
+}
+
+@keyframes birdGlide {
+  0% {
+    transform: translate3d(-18%, 6px, 0) scale(0.85);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.85;
+  }
+  85% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate3d(115%, -14px, 0) scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes sunbeamPulse {
+  0%, 100% {
+    opacity: 0.32;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.52;
+    transform: scale(1.04);
+  }
+}
+
+@keyframes moteFloat {
+  0% {
+    transform: translate3d(0, 10px, 0) scale(0.7);
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.85;
+  }
+  70% {
+    opacity: 0.65;
+  }
+  100% {
+    transform: translate3d(10px, -26px, 0) scale(1.1);
+    opacity: 0;
+  }
+}
+
+@keyframes waterShimmer {
+  0%, 100% {
+    opacity: 0.25;
+    transform: translateX(-2%) scaleX(1);
+  }
+  50% {
+    opacity: 0.48;
+    transform: translateX(2%) scaleX(1.04);
+  }
+}
+
+.animate-lantern-flicker {
+  animation: lanternFlicker 3.6s ease-in-out infinite;
+}
+
+.animate-vine-sway {
+  animation: vineSway 5.5s ease-in-out infinite;
+}
+
+.animate-bird-glide {
+  animation: birdGlide 18s linear infinite;
+}
+
+.animate-sunbeam-pulse {
+  animation: sunbeamPulse 6s ease-in-out infinite;
+}
+
+.animate-mote-float {
+  animation: moteFloat 5s ease-in-out infinite;
+}
+
+.animate-water-shimmer {
+  animation: waterShimmer 4.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-lantern-flicker,
+  .animate-vine-sway,
+  .animate-bird-glide,
+  .animate-sunbeam-pulse,
+  .animate-mote-float,
+  .animate-water-shimmer {
+    animation: none !important;
+  }
+}
