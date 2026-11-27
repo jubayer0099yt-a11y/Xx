@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Share2, Volume2, VolumeX, Copy, Check, Palette } from 'lucide-react';
+import { Share2, Copy, Check, Palette } from 'lucide-react';
 import { ProfileData, ThemePreset } from '../types';
 import { ThemeConfig, THEME_CONFIGS } from '../data/themes';
 import { Language, TRANSLATIONS } from '../data/i18n';
@@ -205,24 +205,6 @@ export function Header({
             themeConfig={themeConfig}
             lang={lang}
           />
-
-          {/* Sound Toggle */}
-          <button
-            onClick={onToggleSound}
-            aria-label={soundEnabled ? 'Mute tap audio' : 'Enable tap audio'}
-            title={soundEnabled ? 'Mute audio feedback' : 'Enable audio feedback'}
-            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl border flex items-center justify-center transition-colors ${
-              isLight
-                ? 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
-                : 'bg-neutral-900/80 hover:bg-neutral-800 text-neutral-300 hover:text-white border-neutral-800'
-            }`}
-          >
-            {soundEnabled ? (
-              <Volume2 className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${themeConfig.accentText}`} />
-            ) : (
-              <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-neutral-500" />
-            )}
-          </button>
 
           {/* Share Profile Button */}
           <button
