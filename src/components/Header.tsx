@@ -5,6 +5,8 @@ import { ThemeConfig, THEME_CONFIGS } from '../data/themes';
 import { Language, TRANSLATIONS } from '../data/i18n';
 import { VerifiedBadgeIcon } from './Icons';
 import { playCopySound, playTapSound } from '../utils/sound';
+import { FloatingMusicPlayer } from './FloatingMusicPlayer';
+import { MUSIC_TRACKS } from '../data/music';
 
 interface HeaderProps {
   profile: ProfileData;
@@ -76,8 +78,8 @@ export function Header({
   return (
     <header className="relative w-full">
       {/* Top utility row */}
-      <div className="w-full max-w-2xl mx-auto px-4 pt-4 pb-2 flex items-center justify-between gap-3 z-30 relative">
-        <div className="flex items-center gap-2">
+      <div className="w-full max-w-2xl mx-auto px-3 sm:px-4 pt-4 pb-2 flex items-center justify-between gap-2 sm:gap-3 z-30 relative">
+        <div className="flex items-center gap-2 shrink-0">
           <span
             className={`font-display font-bold text-sm tracking-wide ${
               isLight ? 'text-slate-900' : 'text-white'
@@ -87,7 +89,7 @@ export function Header({
           </span>
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex items-center gap-1 sm:gap-2">
           {/* Full Language Switcher: [ বাংলা | English ] */}
           <div
             className={`h-8 sm:h-9 p-0.5 rounded-xl border flex items-center shadow-sm ${
@@ -104,7 +106,7 @@ export function Header({
                 playTapSound(soundEnabled);
                 onSelectLanguage('bn');
               }}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all duration-150 ${
+              className={`px-2 sm:px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-semibold transition-all duration-150 ${
                 lang === 'bn'
                   ? `${themeConfig.accentBg} ${themeConfig.accentText} font-bold shadow-sm`
                   : isLight
@@ -121,7 +123,7 @@ export function Header({
                 playTapSound(soundEnabled);
                 onSelectLanguage('en');
               }}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all duration-150 ${
+              className={`px-2 sm:px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-semibold transition-all duration-150 ${
                 lang === 'en'
                   ? `${themeConfig.accentBg} ${themeConfig.accentText} font-bold shadow-sm`
                   : isLight
@@ -195,6 +197,14 @@ export function Header({
               </div>
             )}
           </div>
+
+          {/* Compact Music Player Button (same style as Color Theme button) */}
+          <FloatingMusicPlayer
+            tracks={MUSIC_TRACKS}
+            soundEnabled={soundEnabled}
+            themeConfig={themeConfig}
+            lang={lang}
+          />
 
           {/* Sound Toggle */}
           <button
