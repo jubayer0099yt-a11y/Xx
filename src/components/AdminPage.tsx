@@ -85,8 +85,8 @@ export function AdminPage({
   const [isConfigured, setIsConfigured] = useState(true);
   const [apiUnreachable, setApiUnreachable] = useState(false);
 
-  // Session Bearer token kept exclusively in React memory (never localStorage/sessionStorage)
-  const [authToken, setAuthToken] = useState<string | null>(null);
+  // Server-verified HttpOnly cookie session state (no token kept in JS or browser storage)
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [adminUsername, setAdminUsername] = useState<string | null>(null);
 
   const [usernameInput, setUsernameInput] = useState('');
@@ -104,30 +104,53 @@ export function AdminPage({
   const [busyMessageId, setBusyMessageId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Check whether server admin credentials have been configured and API is reachable
+  // Check server configuration status & existing HttpOnly session cookie on mount
   useEffect(() => {
     let active = true;
-    async function loadStatus() {
+    async function bootstrapSession() {
       try {
-        const res = await fetch('/api/admin/status', { cache: 'no-store' });
-        const contentType = res.headers.get('content-type') || '';
-        if (!res.ok || !contentType.includes('application/json')) {
+        const [statusRes, sessionRes] = await Promise.all([
+          fetch('/api/admin/status', { credentials: 'include', cache: 'no-store' }),
+          fetch('/api/admin/session', { credentials: 'include', cache: 'no-store' }),
+        ]);
+
+        const statusType = statusRes.headers.get('content-type') || '';
+        if (!statusRes.ok || !statusType.includes('application/json')) {
           if (active) {
             setApiUnreachable(true);
             setAuthError(t.adminApiUnreachable);
           }
           return;
         }
-        const data = await res.json();
-        if (active && typeof data?.configured === 'boolean') {
+
+        const statusData = await statusRes.json();
+        if (active && typeof statusData?.configured === 'boolean') {
           setApiUnreachable(false);
-          setIsConfigured(data.configured);
-          if (data.invalidHashConfig) {
+          setIsConfigured(statusData.configured);
+          if (statusData.invalidHashConfig) {
             setAuthError(t.adminInvalidHashConfig);
+          } else if (statusData.missingSessionSecret) {
+            setAuthError(
+              lang === 'bn'
+                ? 'সার্ভারে ADMIN_SESSION_SECRET (কমপক্ষে ১৬ অক্ষর) Environment Variable সেট করুন।'
+                : 'Configure ADMIN_SESSION_SECRET (16+ characters) in server Environment Variables.'
+            );
           }
         } else if (active) {
           setApiUnreachable(true);
           setAuthError(t.adminApiUnreachable);
+          return;
+        }
+
+        const sessionType = sessionRes.headers.get('content-type') || '';
+        if (sessionRes.ok && sessionType.includes('application/json')) {
+          const sessionData = await sessionRes.json().catch(() => ({}));
+          if (active && sessionData?.ok && sessionData?.authenticated) {
+            setIsAuthenticated(true);
+            setAdminUsername(
+              typeof sessionData.username === 'string' ? sessionData.username : 'admin'
+            );
+          }
         }
       } catch {
         if (active) {
@@ -138,14 +161,14 @@ export function AdminPage({
         if (active) setStatusLoading(false);
       }
     }
-    void loadStatus();
+    void bootstrapSession();
     return () => {
       active = false;
     };
-  }, [t.adminApiUnreachable, t.adminInvalidHashConfig]);
+  }, [lang, t.adminApiUnreachable, t.adminInvalidHashConfig]);
 
   const clearSession = useCallback((errorMsg?: string) => {
-    setAuthToken(null);
+    setIsAuthenticated(false);
     setAdminUsername(null);
     setMessages([]);
     setConfirmDeleteId(null);
@@ -154,50 +177,45 @@ export function AdminPage({
     }
   }, []);
 
-  const fetchMessages = useCallback(
-    async (token: string) => {
-      setIsLoadingMessages(true);
-      setActionError(null);
-      try {
-        const res = await fetch('/api/admin/messages', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          cache: 'no-store',
-        });
-        if (res.status === 401) {
-          clearSession(
-            lang === 'bn'
-              ? 'সেশন শেষ হয়ে গেছে। অনুগ্রহ করে আবার লগইন করুন।'
-              : 'Session expired. Please sign in again.'
-          );
-          return;
-        }
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data?.ok || !Array.isArray(data?.messages)) {
-          setActionError(
-            typeof data?.error === 'string' ? data.error : 'Failed to load messages.'
-          );
-          return;
-        }
-        setMessages(data.messages);
-      } catch {
-        setActionError(
+  const fetchMessages = useCallback(async () => {
+    setIsLoadingMessages(true);
+    setActionError(null);
+    try {
+      const res = await fetch('/api/admin/messages', {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      if (res.status === 401) {
+        clearSession(
           lang === 'bn'
-            ? 'সার্ভার থেকে মেসেজ লোড করা যায়নি।'
-            : 'Unable to fetch messages from the server.'
+            ? 'সেশন শেষ হয়ে গেছে। অনুগ্রহ করে আবার লগইন করুন।'
+            : 'Session expired. Please sign in again.'
         );
-      } finally {
-        setIsLoadingMessages(false);
+        return;
       }
-    },
-    [clearSession, lang]
-  );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.ok || !Array.isArray(data?.messages)) {
+        setActionError(
+          typeof data?.error === 'string' ? data.error : 'Failed to load messages.'
+        );
+        return;
+      }
+      setMessages(data.messages);
+    } catch {
+      setActionError(
+        lang === 'bn'
+          ? 'সার্ভার থেকে মেসেজ লোড করা যায়নি।'
+          : 'Unable to fetch messages from the server.'
+      );
+    } finally {
+      setIsLoadingMessages(false);
+    }
+  }, [clearSession, lang]);
 
   useEffect(() => {
-    if (!authToken) return;
-    void fetchMessages(authToken);
-  }, [authToken, fetchMessages]);
+    if (!isAuthenticated) return;
+    void fetchMessages();
+  }, [isAuthenticated, fetchMessages]);
 
   const handleAuthSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -220,8 +238,10 @@ export function AdminPage({
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
         },
         body: JSON.stringify({
           username: cleanUsername,
@@ -238,7 +258,7 @@ export function AdminPage({
 
       const data = await res.json().catch(() => ({}));
 
-      if (!res.ok || !data?.ok || typeof data?.token !== 'string') {
+      if (!res.ok || !data?.ok) {
         if (res.status === 403 && !isConfigured) {
           setIsConfigured(true);
         }
@@ -267,9 +287,23 @@ export function AdminPage({
         return;
       }
 
+      // Verify HttpOnly session cookie round-trip cleanly with /api/admin/session
+      const sessionVerifyRes = await fetch('/api/admin/session', {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      if (!sessionVerifyRes.ok) {
+        setAuthError(
+          lang === 'bn'
+            ? 'সেশন কুকি সংরক্ষণ করা যায়নি। অনুগ্রহ করে HTTPS বা কুকি অনুমোদিত ব্রাউজারে চেষ্টা করুন।'
+            : 'Session cookie was rejected by browser. Ensure cookies are enabled and try again.'
+        );
+        return;
+      }
+
       setApiUnreachable(false);
       setIsConfigured(true);
-      setAuthToken(data.token);
+      setIsAuthenticated(true);
       setAdminUsername(typeof data.username === 'string' ? data.username : cleanUsername);
       setPasswordInput('');
       playCopySound(soundEnabled);
@@ -286,25 +320,23 @@ export function AdminPage({
 
   const handleSignOut = async () => {
     playTapSound(soundEnabled);
-    const currentToken = authToken;
     clearSession();
     setPasswordInput('');
-    if (currentToken) {
-      try {
-        await fetch('/api/admin/logout', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${currentToken}`,
-          },
-        });
-      } catch {
-        // Ignore network errors on logout cleanup
-      }
+    try {
+      await fetch('/api/admin/logout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+      });
+    } catch {
+      // Ignore network errors on logout cleanup
     }
   };
 
   const handleToggleStatus = async (msg: AdminMessageRecord) => {
-    if (!authToken) return;
+    if (!isAuthenticated) return;
     playTapSound(soundEnabled);
     setBusyMessageId(msg.id);
     setActionError(null);
@@ -313,9 +345,10 @@ export function AdminPage({
     try {
       const res = await fetch(`/api/admin/messages/${encodeURIComponent(msg.id)}`, {
         method: 'PATCH',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`,
+          'X-Requested-With': 'XMLHttpRequest',
         },
         body: JSON.stringify({ status: nextStatus }),
       });
@@ -348,7 +381,7 @@ export function AdminPage({
   };
 
   const handleDeleteMessage = async (msgId: string) => {
-    if (!authToken) return;
+    if (!isAuthenticated) return;
     playTapSound(soundEnabled);
     setBusyMessageId(msgId);
     setActionError(null);
@@ -356,8 +389,9 @@ export function AdminPage({
     try {
       const res = await fetch(`/api/admin/messages/${encodeURIComponent(msgId)}`, {
         method: 'DELETE',
+        credentials: 'include',
         headers: {
-          Authorization: `Bearer ${authToken}`,
+          'X-Requested-With': 'XMLHttpRequest',
         },
       });
 
@@ -491,7 +525,7 @@ export function AdminPage({
             </button>
           </div>
 
-          {authToken && (
+          {isAuthenticated && (
             <button
               type="button"
               onClick={handleSignOut}
@@ -516,7 +550,7 @@ export function AdminPage({
           <Loader2 className="w-7 h-7 animate-spin text-amber-400" />
           <p className="text-xs text-slate-400">{t.adminSubtitle}</p>
         </div>
-      ) : !authToken ? (
+      ) : !isAuthenticated ? (
         /* Username & Password Admin Login (or First-Run Setup when unconfigured) */
         <div
           className={`rounded-3xl border backdrop-blur-xl p-6 sm:p-8 max-w-md mx-auto space-y-5 relative overflow-hidden ${cardSurface}`}
@@ -693,7 +727,7 @@ export function AdminPage({
                   type="button"
                   onClick={() => {
                     playTapSound(soundEnabled);
-                    if (authToken) void fetchMessages(authToken);
+                    if (isAuthenticated) void fetchMessages();
                   }}
                   disabled={isLoadingMessages}
                   title={t.adminRefresh}
