@@ -3,16 +3,16 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 
-import adminStatusHandler from './api/admin/status';
-import adminSetupHandler from './api/admin/setup';
-import adminLoginHandler from './api/admin/login';
-import adminSessionHandler from './api/admin/session';
-import adminLogoutHandler from './api/admin/logout';
-import adminMessagesHandler from './api/admin/messages/index';
-import adminMessageByIdHandler from './api/admin/messages/[id]';
-import contactHandler from './api/contact';
-import visitorsHandler from './api/visitors';
-import visitorsHitHandler from './api/visitors/hit';
+import adminStatusHandler from './api/admin/status.js';
+import adminSetupHandler from './api/admin/setup.js';
+import adminLoginHandler from './api/admin/login.js';
+import adminSessionHandler from './api/admin/session.js';
+import adminLogoutHandler from './api/admin/logout.js';
+import adminMessagesHandler from './api/admin/messages/index.js';
+import adminMessageByIdHandler from './api/admin/messages/[id].js';
+import contactHandler from './api/contact.js';
+import visitorsHandler from './api/visitors/index.js';
+import visitorsHitHandler from './api/visitors/hit.js';
 
 async function startServer() {
   const app = express();

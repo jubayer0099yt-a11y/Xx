@@ -1,4 +1,4 @@
-import { authenticateAdminRequest } from '../../_lib/auth';
+import { authenticateAdminRequest } from '../../_lib/auth.js';
 import {
   ApiRequest,
   ApiResponse,
@@ -7,13 +7,13 @@ import {
   sendJson,
   setNoStoreHeaders,
   verifyCsrfRequest,
-} from '../../_lib/http';
+} from '../../_lib/http.js';
 import {
   readContactMessages,
   StoredContactMessage,
   VALID_ID_REGEX,
   writeContactMessages,
-} from '../../_lib/storage';
+} from '../../_lib/storage.js';
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   setNoStoreHeaders(res);

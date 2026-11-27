@@ -1,17 +1,17 @@
 import crypto from 'crypto';
-import { createRateLimiter } from './_lib/auth';
+import { createRateLimiter } from './_lib/auth.js';
 import {
   ApiRequest,
   ApiResponse,
   getClientIp,
   parseJsonBody,
   sendJson,
-} from './_lib/http';
+} from './_lib/http.js';
 import {
   readContactMessages,
   VALID_ID_REGEX,
   writeContactMessages,
-} from './_lib/storage';
+} from './_lib/storage.js';
 
 function stripControlChars(value: string): string {
   return value.replace(/[\r\n\x00-\x1f\x7f]/g, ' ').trim();

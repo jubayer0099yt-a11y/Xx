@@ -5,7 +5,7 @@ import {
   signAdminToken,
   StoredAdminCredentials,
   VALID_USERNAME_REGEX,
-} from '../_lib/auth';
+} from '../_lib/auth.js';
 import {
   ApiRequest,
   ApiResponse,
@@ -14,8 +14,8 @@ import {
   sendJson,
   setNoStoreHeaders,
   verifyCsrfRequest,
-} from '../_lib/http';
-import { getAdminAuthFilePath } from '../_lib/storage';
+} from '../_lib/http.js';
+import { getAdminAuthFilePath } from '../_lib/storage.js';
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   setNoStoreHeaders(res);

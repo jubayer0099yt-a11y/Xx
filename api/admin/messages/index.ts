@@ -1,6 +1,6 @@
-import { authenticateAdminRequest } from '../../_lib/auth';
-import { ApiRequest, ApiResponse, sendJson, setNoStoreHeaders } from '../../_lib/http';
-import { readContactMessages } from '../../_lib/storage';
+import { authenticateAdminRequest } from '../../_lib/auth.js';
+import { ApiRequest, ApiResponse, sendJson, setNoStoreHeaders } from '../../_lib/http.js';
+import { readContactMessages } from '../../_lib/storage.js';
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   setNoStoreHeaders(res);

@@ -115,7 +115,7 @@ export function AdminPage({
         ]);
 
         const statusType = statusRes.headers.get('content-type') || '';
-        if (!statusRes.ok || !statusType.includes('application/json')) {
+        if (!statusType.includes('application/json')) {
           if (active) {
             setApiUnreachable(true);
             setAuthError(t.adminApiUnreachable);
@@ -123,23 +123,32 @@ export function AdminPage({
           return;
         }
 
-        const statusData = await statusRes.json();
-        if (active && typeof statusData?.configured === 'boolean') {
+        const statusData = await statusRes.json().catch(() => null);
+        if (!statusRes.ok || !statusData || typeof statusData?.configured !== 'boolean') {
+          if (active) {
+            if (typeof statusData?.error === 'string' && statusData.error.length > 0) {
+              setApiUnreachable(false);
+              setAuthError(statusData.error);
+            } else {
+              setApiUnreachable(true);
+              setAuthError(t.adminApiUnreachable);
+            }
+          }
+          return;
+        }
+
+        if (active) {
           setApiUnreachable(false);
-          setIsConfigured(statusData.configured);
+          setIsConfigured(statusData.configured || statusData.missingSessionSecret);
           if (statusData.invalidHashConfig) {
             setAuthError(t.adminInvalidHashConfig);
           } else if (statusData.missingSessionSecret) {
             setAuthError(
               lang === 'bn'
-                ? 'সার্ভারে ADMIN_SESSION_SECRET (কমপক্ষে ১৬ অক্ষর) Environment Variable সেট করুন।'
-                : 'Configure ADMIN_SESSION_SECRET (16+ characters) in server Environment Variables.'
+                ? 'Vercel Environment Variables-এ ADMIN_USERNAME, ADMIN_PASSWORD এবং ADMIN_SESSION_SECRET (১৬+ অক্ষর) সেট করে Redeploy করুন।'
+                : 'Set ADMIN_USERNAME, ADMIN_PASSWORD, and ADMIN_SESSION_SECRET (16+ chars) in Vercel Environment Variables and redeploy.'
             );
           }
-        } else if (active) {
-          setApiUnreachable(true);
-          setAuthError(t.adminApiUnreachable);
-          return;
         }
 
         const sessionType = sessionRes.headers.get('content-type') || '';

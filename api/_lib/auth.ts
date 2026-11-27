@@ -1,8 +1,7 @@
-import 'dotenv/config';
 import fs from 'fs';
 import crypto from 'crypto';
-import { getAdminAuthFilePath } from './storage';
-import { ApiRequest, extractSessionToken } from './http';
+import { getAdminAuthFilePath } from './storage.js';
+import { ApiRequest, extractSessionToken } from './http.js';
 
 export const VALID_USERNAME_REGEX = /^[a-zA-Z0-9._-]{3,64}$/;
 export const SESSION_TTL_MS = 12 * 60 * 60 * 1000;

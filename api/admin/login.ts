@@ -4,7 +4,7 @@ import {
   signAdminToken,
   timingSafeTextEqual,
   verifyPasswordScrypt,
-} from '../_lib/auth';
+} from '../_lib/auth.js';
 import {
   ApiRequest,
   ApiResponse,
@@ -13,7 +13,7 @@ import {
   parseJsonBody,
   sendJson,
   setNoStoreHeaders,
-} from '../_lib/http';
+} from '../_lib/http.js';
 
 const isLoginRateLimited = createRateLimiter(10 * 60 * 1000, 10);
 

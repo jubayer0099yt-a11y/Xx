@@ -1,4 +1,4 @@
-import { revokeAdminToken } from '../_lib/auth';
+import { revokeAdminToken } from '../_lib/auth.js';
 import {
   ApiRequest,
   ApiResponse,
@@ -7,7 +7,7 @@ import {
   sendJson,
   setNoStoreHeaders,
   verifyCsrfRequest,
-} from '../_lib/http';
+} from '../_lib/http.js';
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   setNoStoreHeaders(res);

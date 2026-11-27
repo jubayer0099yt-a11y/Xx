@@ -1,5 +1,5 @@
-import { ApiRequest, ApiResponse, sendJson } from '../_lib/http';
-import { getActiveOnline, getVisitorCount, saveVisitorCount } from '../_lib/storage';
+import { ApiRequest, ApiResponse, sendJson } from '../_lib/http.js';
+import { getActiveOnline, getVisitorCount, saveVisitorCount } from '../_lib/storage.js';
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'POST') {

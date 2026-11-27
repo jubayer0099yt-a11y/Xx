@@ -1,5 +1,5 @@
-import { authenticateAdminRequest } from '../_lib/auth';
-import { ApiRequest, ApiResponse, sendJson, setNoStoreHeaders } from '../_lib/http';
+import { authenticateAdminRequest } from '../_lib/auth.js';
+import { ApiRequest, ApiResponse, sendJson, setNoStoreHeaders } from '../_lib/http.js';
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   setNoStoreHeaders(res);
